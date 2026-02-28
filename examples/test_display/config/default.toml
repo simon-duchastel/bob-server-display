@@ -1,7 +1,7 @@
 # Test Display Configuration
 
-# DRM device path (usually /dev/dri/card0 on Raspberry Pi)
-drm_device = "/dev/dri/card0"
+# DRM device path (use card1 for display on Raspberry Pi 5)
+drm_device = "/dev/dri/card1"
 
 # Display mode (uncomment to force specific resolution)
 # If not specified, auto-detects from connected display

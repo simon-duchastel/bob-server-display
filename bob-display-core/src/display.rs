@@ -87,7 +87,6 @@ impl Display {
         );
 
         // Get the preferred mode or use the first available mode
-        // If config has a mode, we'll use that size, otherwise use first available
         let mode = connector_info
             .modes()
             .first()
@@ -99,18 +98,44 @@ impl Display {
         let height = height as u32;
         info!("Selected mode: {}x{} @ {}Hz", width, height, mode.vrefresh());
 
-        // Find a CRTC that can drive this connector
-        let crtc = resources
-            .crtcs()
-            .iter()
-            .find(|&&crtc| {
-                gbm_device
-                    .get_crtc(crtc)
-                    .map(|info: drm::control::crtc::Info| info.mode().is_none())
-                    .unwrap_or(false)
-            })
-            .copied()
-            .ok_or_else(|| anyhow!("No available CRTC found"))?;
+        // Find a suitable CRTC for this connector
+        // First, try to find the CRTC that's currently driving this connector
+        let mut selected_crtc = None;
+        
+        // Check which encoders are possible for this connector
+        for &encoder_id in connector_info.encoders() {
+            if let Ok(encoder_info) = gbm_device.get_encoder(encoder_id) {
+                // If encoder has a CRTC, check if it's in our resources
+                if let Some(crtc_id) = encoder_info.crtc() {
+                    if resources.crtcs().contains(&crtc_id) {
+                        selected_crtc = Some(crtc_id);
+                        info!("Found CRTC {:?} via encoder {:?}", crtc_id, encoder_id);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // If no CRTC found via encoder, try to find an unused one
+        if selected_crtc.is_none() {
+            selected_crtc = resources
+                .crtcs()
+                .iter()
+                .find(|&&crtc| {
+                    gbm_device
+                        .get_crtc(crtc)
+                        .map(|info: drm::control::crtc::Info| info.mode().is_none())
+                        .unwrap_or(false)
+                })
+                .copied();
+        }
+        
+        // If still no CRTC, just use the first one available
+        let crtc = selected_crtc
+            .or_else(|| resources.crtcs().first().copied())
+            .ok_or_else(|| anyhow!("No CRTC found"))?;
+
+        info!("Using CRTC: {:?}", crtc);
 
         let mut display = Self {
             gbm_device,
