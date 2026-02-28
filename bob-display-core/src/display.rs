@@ -4,8 +4,8 @@ use drm::control::framebuffer;
 use drm::control::Device as ControlDevice;
 use drm::Device;
 use gbm::BufferObjectFlags;
-use std::fs::{File, OpenOptions};
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd};
+use std::fs::File;
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use tracing::info;
 
@@ -32,8 +32,7 @@ impl Device for DrmDevice {}
 impl ControlDevice for DrmDevice {}
 
 pub struct Display {
-    drm_device: DrmDevice,
-    gbm_device: gbm::Device<File>,
+    gbm_device: gbm::Device<DrmDevice>,
     width: u32,
     height: u32,
     renderer: Renderer,
@@ -45,24 +44,22 @@ pub struct Display {
 impl Display {
     pub fn new(config: &Config) -> Result<Self> {
         // Open DRM device
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .custom_flags(libc::O_CLOEXEC)
-            .open(&config.drm_device)
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        options.write(true);
+        options.custom_flags(libc::O_CLOEXEC);
+        let file = options.open(&config.drm_device)
             .with_context(|| format!("Failed to open DRM device: {}", config.drm_device))?;
 
         let drm_device = DrmDevice(file);
         info!("Opened DRM device: {}", config.drm_device);
 
-        // Create GBM device - GBM needs the raw FD but manages its own wrapper
-        let gbm_device = unsafe {
-            gbm::Device::new(File::from_raw_fd(drm_device.as_raw_fd()))
-                .map_err(|_| anyhow!("Failed to create GBM device"))?
-        };
+        // Create GBM device - this will implement DRM Device traits too
+        let gbm_device = gbm::Device::new(drm_device)
+            .map_err(|_| anyhow!("Failed to create GBM device"))?;
 
-        // Get display resources using the ControlDevice trait
-        let resources = drm_device
+        // Get display resources using the ControlDevice trait (now through GBM device)
+        let resources = gbm_device
             .resource_handles()
             .context("Failed to get DRM resources")?;
 
@@ -71,7 +68,7 @@ impl Display {
             .connectors()
             .iter()
             .find_map(|&conn| {
-                let info = drm_device.get_connector(conn, true).ok()?;
+                let info = gbm_device.get_connector(conn, true).ok()?;
                 if info.state() == drm::control::connector::State::Connected {
                     Some(conn)
                 } else {
@@ -80,7 +77,7 @@ impl Display {
             })
             .ok_or_else(|| anyhow!("No connected display found"))?;
 
-        let connector_info = drm_device
+        let connector_info = gbm_device
             .get_connector(connector, true)
             .context("Failed to get connector info")?;
 
@@ -107,7 +104,7 @@ impl Display {
             .crtcs()
             .iter()
             .find(|&&crtc| {
-                drm_device
+                gbm_device
                     .get_crtc(crtc)
                     .map(|info: drm::control::crtc::Info| info.mode().is_none())
                     .unwrap_or(false)
@@ -116,7 +113,6 @@ impl Display {
             .ok_or_else(|| anyhow!("No available CRTC found"))?;
 
         let mut display = Self {
-            drm_device,
             gbm_device,
             width,
             height,
@@ -152,7 +148,7 @@ impl Display {
         self.framebuffer = Some(fb);
 
         // Set the CRTC to display the framebuffer with the selected mode
-        self.drm_device
+        self.gbm_device
             .set_crtc(self.crtc, Some(fb), (0, 0), &[self.connector], Some(mode))
             .context("Failed to set CRTC")?;
 
@@ -184,7 +180,7 @@ impl Drop for Display {
     fn drop(&mut self) {
         // Cleanup DRM resources
         if let Some(fb) = self.framebuffer {
-            let _ = self.drm_device.destroy_framebuffer(fb);
+            let _ = self.gbm_device.destroy_framebuffer(fb);
         }
         info!("Display resources cleaned up");
     }
