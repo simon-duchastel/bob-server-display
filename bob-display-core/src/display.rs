@@ -144,15 +144,10 @@ impl Display {
             )
             .map_err(|_| anyhow!("Failed to create GBM buffer"))?;
 
-        // Create DRM framebuffer from GBM buffer
-        // The GBM BufferObject implements the drm::buffer::Buffer trait
-        let fb = self.drm_device
-            .add_framebuffer(
-                &buffer,
-                24, // depth (bits per color component)
-                32, // bpp (bits per pixel for XRGB8888)
-            )
-            .context("Failed to create framebuffer")?;
+        // Create DRM framebuffer from GBM buffer using GBM's helper method
+        let fb = self.gbm_device
+            .add_framebuffer(&buffer, 24, 32)
+            .map_err(|_| anyhow!("Failed to create framebuffer"))?;
 
         self.framebuffer = Some(fb);
 
