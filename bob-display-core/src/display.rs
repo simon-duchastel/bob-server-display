@@ -2,18 +2,38 @@ use anyhow::{anyhow, Context, Result};
 use drm::buffer::DrmFourcc;
 use drm::control::crtc;
 use drm::control::framebuffer;
-use drm::control::Device;
+use drm::control::Device as ControlDevice;
+use drm::Device;
 use gbm::BufferObjectFlags;
 use std::fs::{File, OpenOptions};
-use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use tracing::info;
 
 use crate::config::Config;
 use crate::render::Renderer;
 
+/// Wrapper struct around File that implements the DRM Device traits
+#[derive(Debug)]
+pub struct DrmDevice(File);
+
+impl AsFd for DrmDevice {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
+impl AsRawFd for DrmDevice {
+    fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
+        self.0.as_raw_fd()
+    }
+}
+
+impl Device for DrmDevice {}
+impl ControlDevice for DrmDevice {}
+
 pub struct Display {
-    drm_device: File,
+    drm_device: DrmDevice,
     gbm_device: gbm::Device<File>,
     width: u32,
     height: u32,
@@ -26,16 +46,17 @@ pub struct Display {
 impl Display {
     pub fn new(config: &Config) -> Result<Self> {
         // Open DRM device
-        let drm_device = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .custom_flags(libc::O_CLOEXEC)
             .open(&config.drm_device)
             .with_context(|| format!("Failed to open DRM device: {}", config.drm_device))?;
 
+        let drm_device = DrmDevice(file);
         info!("Opened DRM device: {}", config.drm_device);
 
-        // Create GBM device
+        // Create GBM device - GBM needs the raw FD but manages its own wrapper
         let gbm_device = unsafe {
             gbm::Device::new(File::from_raw_fd(drm_device.as_raw_fd()))
                 .map_err(|_| anyhow!("Failed to create GBM device"))?
