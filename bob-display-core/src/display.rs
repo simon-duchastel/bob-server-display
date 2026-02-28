@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use drm::buffer::DrmFourcc;
 use drm::control::crtc;
 use drm::control::framebuffer;
 use drm::control::Device as ControlDevice;
@@ -145,22 +144,13 @@ impl Display {
             )
             .map_err(|_| anyhow!("Failed to create GBM buffer"))?;
 
-        // Get the buffer's file descriptor and stride
-        let fd = buffer.fd();
-        let stride = buffer.stride()?;
-        let handle = buffer.handle()?;
-        
         // Create DRM framebuffer from GBM buffer
-        // The handle is a union, we need to access the u32 field
+        // The GBM BufferObject implements the drm::buffer::Buffer trait
         let fb = self.drm_device
             .add_framebuffer(
-                unsafe { handle.s32 } as u32,
-                self.width,
-                self.height,
-                stride,
-                DrmFourcc::Xrgb8888 as u32,
-                32, // bits per pixel for XRGB8888
-                0,
+                &buffer,
+                24, // depth (bits per color component)
+                32, // bpp (bits per pixel for XRGB8888)
             )
             .context("Failed to create framebuffer")?;
 
