@@ -9,7 +9,7 @@ description = "Core library for Bob Display - DRM/KMS rendering and display mana
 [dependencies]
 # DRM/KMS for direct display access
 drm = "0.12"
-gbm = "0.15"
+gbm = { version = "0.15", default-features = false }
 
 # Image handling
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

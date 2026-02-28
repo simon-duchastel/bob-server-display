@@ -2,8 +2,6 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-const DEFAULT_CONFIG: &str = include_str!("../config/default.toml");
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     /// DRM device path (e.g., /dev/dri/card0)
