@@ -1,0 +1,53 @@
+[Unit]
+Description=Bob Server Display Service
+Documentation=https://github.com/simon-duchastel/bob-server-display
+After=systemd-user-sessions.service
+
+[Service]
+Type=simple
+User=bob-display
+Group=bob-display
+
+# Environment
+Environment="RUST_LOG=bob_server_display=info"
+Environment="RUST_BACKTRACE=1"
+
+# Working directory
+WorkingDirectory=/opt/bob-display
+
+# Binary location
+ExecStart=/opt/bob-display/bob-server-display
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/bob-display
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# DRM device access
+DeviceAllow=/dev/dri/card0 rw
+DeviceAllow=/dev/dri/renderD128 rw
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bob-display
+
+[Install]
+WantedBy=multi-user.target

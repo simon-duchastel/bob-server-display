@@ -1,0 +1,24 @@
+# Bob Server Display Configuration
+# Place this file at /etc/bob-display/config.toml
+
+# DRM device path (usually /dev/dri/card0 on Raspberry Pi)
+drm_device = "/dev/dri/card0"
+
+# Display mode (uncomment to force specific resolution)
+# If not specified, auto-detects from connected display
+# [mode]
+# width = 1920
+# height = 1080
+# refresh_rate = 60
+
+# Background color in RGBA format
+background_color = [0, 0, 0, 255]  # Black
+
+# Text color in RGBA format
+text_color = [255, 255, 255, 255]  # White
+
+# Font size in pixels
+font_size = 24.0
+
+# Target frames per second
+target_fps = 60
