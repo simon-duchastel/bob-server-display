@@ -2,10 +2,10 @@ use anyhow::{anyhow, Context, Result};
 use drm::buffer::DrmFourcc;
 use drm::control::crtc;
 use drm::control::framebuffer;
-use drm::control::Device as ControlDevice;
+use drm::control::Device;
 use gbm::BufferObjectFlags;
 use std::fs::{File, OpenOptions};
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use tracing::info;
 
@@ -89,7 +89,7 @@ impl Display {
             .find(|&&crtc| {
                 drm_device
                     .get_crtc(crtc)
-                    .map(|info| info.mode().is_none())
+                    .map(|info: drm::control::crtc::Info| info.mode().is_none())
                     .unwrap_or(false)
             })
             .copied()
@@ -130,9 +130,10 @@ impl Display {
         let handle = buffer.handle()?;
         
         // Create DRM framebuffer from GBM buffer
+        // The handle is a union, we need to access the u32 field
         let fb = self.drm_device
             .add_framebuffer(
-                handle.as_raw_fd() as u32,
+                unsafe { handle.s32 } as u32,
                 self.width,
                 self.height,
                 stride,
