@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     info!("Configuration loaded successfully");
 
     // Initialize display
-    let mut display = Display::new(&config)?;
+    let display = Display::new(&config)?;
     let width = display.width();
     let height = display.height();
     info!("Display initialized: {}x{}", width, height);
