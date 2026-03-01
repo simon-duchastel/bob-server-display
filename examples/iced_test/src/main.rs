@@ -1,28 +1,32 @@
-//! Iced GUI example with direct KMS rendering
+//! Iced GUI example with GPU-accelerated KMS rendering
 //!
-//! This example uses the iced GUI framework with a custom rendering pipeline
+//! This example uses the iced GUI framework with wgpu GPU rendering
 //! that outputs directly to KMS/DRM, bypassing Wayland/X11 entirely.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use bob_display_core::{Config, Display};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{Color, Element, Length, Subscription, Task, Theme};
+use iced_wgpu::wgpu;
 use std::time::{Duration, Instant};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::{error, info};
+
+mod gpu_renderer;
+use gpu_renderer::GpuRenderer;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "iced_test=info".to_string()),
+                .unwrap_or_else(|_| "iced_test=info,wgpu=warn".to_string()),
         )
         .with_writer(std::io::stderr)
         .init();
 
-    info!("Starting Iced KMS Direct Rendering Example");
-    info!("Using iced GUI framework with direct KMS/DRM output");
+    info!("Starting Iced GPU KMS Direct Rendering Example");
+    info!("Using iced GUI framework with wgpu GPU acceleration");
 
     // Load configuration and initialize KMS display
     let config = Config::load()?;
@@ -31,10 +35,13 @@ fn main() -> Result<()> {
     let height = display.height();
 
     info!("Display initialized: {}x{}", width, height);
-    info!("Starting iced application with KMS backend");
+
+    // Initialize GPU renderer
+    let mut gpu = pollster::block_on(GpuRenderer::new(width, height))?;
+    info!("GPU renderer initialized with wgpu");
 
     // Run the iced application
-    run_iced_kms(display, width, height)
+    run_iced_gpu(display, &mut gpu, width, height)
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +76,7 @@ impl IcedApp {
     }
 
     fn title(&self) -> String {
-        String::from("Iced KMS Direct Rendering")
+        String::from("Iced GPU KMS Direct Rendering")
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -115,7 +122,7 @@ impl IcedApp {
                 ..text::Style::default()
             });
 
-        let subtitle = text("Direct Rendering - No Wayland/X11 Required")
+        let subtitle = text("GPU Accelerated - wgpu Rendering")
             .size(24)
             .style(|_| text::Style {
                 color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
@@ -123,7 +130,7 @@ impl IcedApp {
             });
 
         let stats = text(format!(
-            "{}x{} | Frames: {} | FPS: {:.1} | Animation: {}",
+            "{}x{} | Frames: {} | FPS: {:.1} | Animation: {} | GPU: Enabled",
             self.width, self.height, self.frame_count, fps,
             if self.animation_enabled { "ON" } else { "OFF" }
         ))
@@ -220,8 +227,13 @@ impl IcedApp {
     }
 }
 
-/// Run the iced application with KMS backend
-fn run_iced_kms(display: Display, width: u32, height: u32) -> Result<()> {
+/// Run the iced application with GPU-accelerated KMS backend
+fn run_iced_gpu(
+    display: Display,
+    gpu: &mut GpuRenderer,
+    width: u32,
+    height: u32,
+) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     let _guard = rt.enter();
 
@@ -229,9 +241,8 @@ fn run_iced_kms(display: Display, width: u32, height: u32) -> Result<()> {
     let mut sigint = rt.block_on(async { signal(SignalKind::interrupt()) })?;
 
     let mut app = IcedApp::new(width, height);
-    let mut buffer: Vec<u8> = vec![0u8; (width * height * 4) as usize];
 
-    info!("Entering main render loop");
+    info!("Entering main GPU render loop");
     let start_time = Instant::now();
     let mut frame_count = 0u64;
 
@@ -253,44 +264,20 @@ fn run_iced_kms(display: Display, width: u32, height: u32) -> Result<()> {
         // Get the current view
         let view = app.view();
 
-        // Render the view using tiny-skia
-        // Create a pixmap for rendering
-        let mut pixmap = match tiny_skia::Pixmap::new(width, height) {
-            Some(p) => p,
-            None => {
-                error!("Failed to create pixmap");
-                continue;
+        // Render using GPU
+        match gpu.render_frame(&view, width, height) {
+            Ok(buffer) => {
+                // Present to KMS display
+                if let Err(e) = display.render_frame(|kms_buffer, _w, _h| {
+                    let len = kms_buffer.len().min(buffer.len());
+                    kms_buffer[..len].copy_from_slice(&buffer[..len]);
+                }) {
+                    error!("Failed to present frame to KMS: {}", e);
+                }
             }
-        };
-
-        // Get background color
-        let bg_color = hsl_to_rgb(app.hue, 0.3, 0.15);
-        let skia_bg = tiny_skia::Color::from_rgba(
-            bg_color.r,
-            bg_color.g,
-            bg_color.b,
-            1.0,
-        ).unwrap_or(tiny_skia::Color::from_rgba8(40, 40, 50, 255));
-        pixmap.fill(skia_bg);
-
-        // Convert RGBA to BGRX for KMS
-        let skia_data = pixmap.data();
-        for (i, pixel) in skia_data.chunks_exact(4).enumerate() {
-            let idx = i * 4;
-            if idx + 3 < buffer.len() {
-                buffer[idx] = pixel[2];     // B
-                buffer[idx + 1] = pixel[1]; // G
-                buffer[idx + 2] = pixel[0]; // R
-                buffer[idx + 3] = 0xFF;     // X
+            Err(e) => {
+                error!("GPU render error: {}", e);
             }
-        }
-
-        // Present to KMS display
-        if let Err(e) = display.render_frame(|kms_buffer, _w, _h| {
-            let len = kms_buffer.len().min(buffer.len());
-            kms_buffer[..len].copy_from_slice(&buffer[..len]);
-        }) {
-            error!("Failed to present frame: {}", e);
         }
 
         frame_count += 1;

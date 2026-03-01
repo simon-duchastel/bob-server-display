@@ -4,15 +4,19 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Iced GUI test with software rendering and DRM/KMS display"
+description = "Iced GUI test with GPU rendering and DRM/KMS display"
 
 [[bin]]
 name = "iced-test"
 path = "src/main.rs"
 
 [dependencies]
-# Iced GUI framework - using tiny-skia software renderer
-iced = { version = "0.13", default-features = false, features = ["tiny-skia", "image"] }
+# Iced GUI framework - using wgpu for GPU rendering
+iced = { version = "0.13", default-features = false, features = ["wgpu"] }
+iced_wgpu = { version = "0.13", default-features = false }
+
+# wgpu for GPU rendering
+wgpu = { version = "23.0", default-features = false, features = ["vulkan", "gles"] }
 
 # DRM/KMS display support through bob-display-core
 bob-display-core = { path = "../../bob-display-core" }
@@ -27,11 +31,11 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-# Image handling for iced
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-
 # Time for animations
 chrono = "0.4"
 
-# Tiny-skia for software rendering
-tiny-skia = "0.11"
+# Pollster for async block on
+pollster = "0.3"
+
+# Raw window handle (for KMS integration)
+raw-window-handle = "0.6"
