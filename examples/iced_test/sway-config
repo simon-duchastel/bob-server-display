@@ -15,9 +15,6 @@ bar {
 # Set background color (black)
 output * bg #000000 solid_color
 
-# Move cursor off-screen immediately
-exec sleep 0.5 && swaymsg seat seat0 cursor move 9999 9999
-
 # Auto-start the display app
 exec /home/pi/bob-server-display/target/release/iced-test
 
