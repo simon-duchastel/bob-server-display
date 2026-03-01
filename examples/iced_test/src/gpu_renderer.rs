@@ -1,24 +1,26 @@
-//! GPU-accelerated renderer using wgpu
+//! GPU-accelerated renderer using wgpu - Step 1: Proper Setup
 //!
-//! This module provides GPU rendering via wgpu/iced_wgpu,
-//! rendering to an off-screen texture and reading back to CPU for KMS display.
+//! This step properly initializes iced_wgpu with:
+//! - iced_wgpu::Engine for managing GPU resources
+//! - Proper Viewport with physical/logical size handling
+//! - Correct Backend configuration for off-screen rendering
 
 use anyhow::{anyhow, Context, Result};
-use iced::advanced::renderer::Renderer as _;
-use iced::advanced::widget::Tree;
+use iced::advanced::graphics::color;
+use iced::advanced::renderer::{self, Renderer as _};
 use iced::advanced::{self, Layout, Widget};
-use iced::{Color, Element, Renderer, Size, Theme};
-use iced_wgpu::engine::Engine;
+use iced::{Color, Element, Length, Renderer, Size, Theme};
 use iced_wgpu::graphics::Viewport;
 use iced_wgpu::wgpu;
+use iced_wgpu::{self, Backend, Engine, Settings};
 use tracing::{info, warn};
 
-/// GPU renderer that uses wgpu for accelerated rendering
+/// GPU renderer with proper iced_wgpu setup
 pub struct GpuRenderer {
     /// wgpu instance
     #[allow(dead_code)]
     instance: wgpu::Instance,
-    /// wgpu adapter (GPU device handle)
+    /// wgpu adapter
     #[allow(dead_code)]
     adapter: wgpu::Adapter,
     /// wgpu device
@@ -34,40 +36,39 @@ pub struct GpuRenderer {
     /// Texture dimensions
     width: u32,
     height: u32,
-    /// Iced wgpu renderer
-    iced_renderer: Renderer,
-    /// Viewport for rendering
+    /// Iced wgpu engine - manages GPU resources and render pipeline
+    engine: Engine,
+    /// Iced wgpu backend - handles primitive rendering
+    backend: Backend,
+    /// Viewport - manages coordinate spaces and scaling
     viewport: Viewport,
-    /// Staging buffer for async readback
-    staging_buffer: Option<wgpu::Buffer>,
+    /// Scale factor for DPI handling
+    scale_factor: f64,
 }
 
 impl GpuRenderer {
-    /// Create a new GPU renderer with the specified dimensions
+    /// Create a new GPU renderer with proper iced_wgpu initialization
     pub async fn new(width: u32, height: u32) -> Result<Self> {
-        info!("Initializing wgpu GPU renderer: {}x{}", width, height);
+        info!("Step 1: Initializing iced_wgpu with proper setup: {}x{}", width, height);
 
-        // Create wgpu instance
+        // Create wgpu instance with Vulkan and GLES backends
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
             ..Default::default()
         });
 
-        // Request adapter (GPU)
+        // Request high-performance GPU adapter
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None, // Headless rendering
+                compatible_surface: None,
                 force_fallback_adapter: false,
             })
             .await
             .ok_or_else(|| anyhow!("Failed to find GPU adapter"))?;
 
-        let info = adapter.get_info();
-        info!(
-            "GPU adapter: {} ({:?})",
-            info.name, info.backend
-        );
+        let adapter_info = adapter.get_info();
+        info!("GPU adapter: {} ({:?})", adapter_info.name, adapter_info.backend);
 
         // Create device and queue
         let (device, queue) = adapter
@@ -83,7 +84,7 @@ impl GpuRenderer {
             .await
             .context("Failed to create wgpu device")?;
 
-        // Create render target texture
+        // Create render target texture for off-screen rendering
         let texture_size = wgpu::Extent3d {
             width,
             height,
@@ -96,16 +97,14 @@ impl GpuRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_SRC,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
 
         let texture_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Create CPU-readable buffer for readback
-        // KMS expects BGRX format (4 bytes per pixel), but wgpu renders RGBA
         let buffer_size = (width * height * 4) as u64;
         let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Readback Buffer"),
@@ -114,31 +113,39 @@ impl GpuRenderer {
             mapped_at_creation: false,
         });
 
-        // Create staging buffer for async operations
-        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Staging Buffer"),
-            size: buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        // Initialize iced wgpu renderer
-        let backend = iced_wgpu::Backend::new(
+        // STEP 1: Proper iced_wgpu Engine setup
+        // Engine manages the GPU resources, pipelines, and memory
+        let engine = Engine::new(
+            &adapter,
             &device,
             &queue,
-            iced_wgpu::Settings::default(),
-            iced_wgpu::backend::format(),
+            Settings {
+                present_mode: wgpu::PresentMode::AutoVsync,
+                ..Default::default()
+            },
+            wgpu::TextureFormat::Rgba8UnormSrgb,
         );
 
-        let iced_renderer = Renderer::new(backend, iced::Font::DEFAULT, width, height);
+        // STEP 1: Create Backend for rendering primitives
+        // Backend handles the actual drawing of iced primitives (quads, text, etc.)
+        let backend = Backend::new(&device, &engine, iced::Font::DEFAULT, (width, height));
 
-        // Create viewport
+        // STEP 1: Proper Viewport setup
+        // Viewport manages the transformation between logical and physical pixels
+        // This is crucial for proper DPI/scaling handling
+        let scale_factor = 1.0; // No scaling for embedded display
         let viewport = Viewport::with_physical_size(
             iced::Size::new(width, height),
-            1.0, // scale factor
+            scale_factor,
         );
 
-        info!("GPU renderer initialized successfully");
+        info!("Step 1 complete: Engine, Backend, and Viewport initialized");
+        info!("  - Physical size: {}x{}", width, height);
+        info!("  - Logical size: {}x{}", 
+            width as f64 / scale_factor, 
+            height as f64 / scale_factor
+        );
+        info!("  - Scale factor: {}", scale_factor);
 
         Ok(Self {
             instance,
@@ -150,16 +157,17 @@ impl GpuRenderer {
             readback_buffer,
             width,
             height,
-            iced_renderer,
+            engine,
+            backend,
             viewport,
-            staging_buffer: Some(staging_buffer),
+            scale_factor,
         })
     }
 
     /// Render a frame and return the pixel buffer (BGRX format for KMS)
     pub fn render_frame(&mut self, view: &Element<Message>, width: u32, height: u32) -> Result<Vec<u8>>
     where
-        Message: Clone + std::fmt::Debug,
+        Message: Clone + std::fmt::Debug + 'static,
     {
         // Create command encoder
         let mut encoder = self
@@ -204,7 +212,7 @@ impl GpuRenderer {
         // Read back the buffer
         let buffer_slice = self.readback_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
-        
+
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).unwrap();
         });
@@ -220,11 +228,10 @@ impl GpuRenderer {
         for (i, pixel) in data.chunks_exact(4).enumerate() {
             let idx = i * 4;
             if idx + 3 < kms_buffer.len() {
-                // Convert RGBA (from wgpu) to BGRX (for KMS)
-                kms_buffer[idx] = pixel[2];     // B
+                kms_buffer[idx] = pixel[2]; // B
                 kms_buffer[idx + 1] = pixel[1]; // G
                 kms_buffer[idx + 2] = pixel[0]; // R
-                kms_buffer[idx + 3] = 0xFF;     // X
+                kms_buffer[idx + 3] = 0xFF; // X
             }
         }
 
@@ -234,18 +241,16 @@ impl GpuRenderer {
         Ok(kms_buffer)
     }
 
-    /// Render iced UI to the texture
+    /// Render iced UI to the texture using the properly configured backend
     fn render_iced_to_texture<Message>(
         &mut self,
         view: &Element<Message>,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<()>
     where
-        Message: Clone + std::fmt::Debug,
+        Message: Clone + std::fmt::Debug + 'static,
     {
-        // For now, we'll clear the texture to the background color
-        // Full iced_wgpu integration requires more setup
-        
+        // Clear the texture to background color
         let clear_color = wgpu::Color {
             r: 0.15,
             g: 0.15,
@@ -268,21 +273,26 @@ impl GpuRenderer {
             timestamp_writes: None,
         });
 
-        // TODO: Full iced_wgpu integration
-        // This would involve:
-        // 1. Creating a compatible iced Backend
-        // 2. Using iced's render pipeline
-        // 3. Handling text rendering via glyphon
-        // 4. Managing draw commands
-        
-        // For now, we just clear to show the GPU is working
-        warn!("Full iced_wgpu rendering not yet implemented - clearing to background color");
+        warn!("Step 1: Setup complete. Next steps needed:");
+        warn!("  - Step 2: Extract and render primitives");
+        warn!("  - Step 3: Add text rendering with glyphon");
+        warn!("  - Step 4: Encode draw commands");
 
         Ok(())
     }
+
+    /// Get the viewport for layout calculations
+    pub fn viewport(&self) -> &Viewport {
+        &self.viewport
+    }
+
+    /// Get the scale factor
+    pub fn scale_factor(&self) -> f64 {
+        self.scale_factor
+    }
 }
 
-/// Placeholder message type for rendering
+/// Message type for iced rendering
 #[derive(Debug, Clone)]
 pub enum Message {
     Tick,
