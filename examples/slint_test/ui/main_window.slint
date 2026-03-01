@@ -1,0 +1,53 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+component MainWindow inherits Window {
+    title: "Slint Test";
+    width: 800px;
+    height: 600px;
+
+    VerticalBox {
+        spacing: 20px;
+        padding: 20px;
+
+        Text {
+            text: "Hello, Slint!";
+            font-size: 50px;
+            color: #FF0000;
+        }
+
+        Text {
+            text: "This is a test with colored rectangles below";
+            font-size: 30px;
+        }
+
+        Rectangle {
+            background: #008080;
+            height: 50px;
+        }
+
+        Rectangle {
+            background: #CC33CC;
+            width: 200px;
+            height: 100px;
+            x: 20px;
+        }
+
+        Rectangle {
+            background: #3333CC;
+            height: 80px;
+
+            Text {
+                text: "Blue Rectangle";
+                color: #FFFFFF;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: "Additional text here to verify rendering";
+            font-size: 20px;
+            color: #00CC00;
+        }
+    }
+}
