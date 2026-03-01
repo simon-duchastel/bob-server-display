@@ -1,6 +1,6 @@
 # Bob Display
 
-GPU-accelerated kiosk display running on Sway Wayland compositor.
+GPU-accelerated kiosk display for my personal server.
 
 ## Running with Sway (Kiosk Mode)
 
