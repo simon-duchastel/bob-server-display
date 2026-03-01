@@ -1,0 +1,16 @@
+[package]
+name = "iced_test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "iced_test"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+bob-display-core = { path = "../../bob-display-core" }
+tokio = { version = "1.35", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
