@@ -39,3 +39,6 @@ pollster = "0.3"
 
 # Raw window handle (for KMS integration)
 raw-window-handle = "0.6"
+
+# Glyphon for text rendering (used by iced_wgpu)
+glyphon = { version = "0.6", default-features = false }
