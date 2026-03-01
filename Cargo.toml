@@ -1,14 +1,18 @@
-[workspace]
-members = [
-    "bob-display-core",
-    "examples/test_display",
-    "examples/slint_test",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "bob-display"
 version = "0.1.0"
 edition = "2021"
 authors = ["Simon Duchastel <simon@duchastel.com>"]
 license = "MIT"
-repository = "https://github.com/simon-duchastel/bob-server-display"
+description = "Bob Display - Kiosk UI for Simon's personal server"
+
+[[bin]]
+name = "bob-display"
+path = "src/main.rs"
+
+[dependencies]
+# Iced GUI framework with GPU-accelerated wgpu backend
+iced = { version = "0.13", features = ["wgpu", "advanced", "tokio"] }
+
+# Async runtime
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
