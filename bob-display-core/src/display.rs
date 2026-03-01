@@ -36,9 +36,12 @@ pub struct Display {
     width: u32,
     height: u32,
     framebuffer: framebuffer::Handle,
-    crtc: crtc::Handle,
-    connector: drm::control::connector::Handle,
-    mode: drm::control::Mode,
+    #[allow(dead_code)]
+    _crtc: crtc::Handle,
+    #[allow(dead_code)]
+    _connector: drm::control::connector::Handle,
+    #[allow(dead_code)]
+    _mode: drm::control::Mode,
 }
 
 impl Display {
@@ -163,9 +166,9 @@ impl Display {
             width,
             height,
             framebuffer: fb,
-            crtc,
-            connector,
-            mode,
+            _crtc: crtc,
+            _connector: connector,
+            _mode: mode,
         })
     }
 
@@ -185,7 +188,7 @@ impl Display {
         let stride = self.buffer.stride();
         info!("GBM stride: {:?}, expected minimum: {}", stride, (self.width * 4));
         
-        self.buffer
+        let _ = self.buffer
             .map_mut(&self.gbm_device, 0, 0, self.width, self.height, |mapped| {
                 let buffer_slice = mapped.buffer_mut();
                 render_fn(buffer_slice, self.width, self.height);

@@ -5,10 +5,9 @@
 
 use anyhow::Result;
 use bob_display_core::{Config, Display};
-use iced::alignment::Horizontal;
-use iced::widget::{button, column, container, row, text, Space};
-use iced::{Color, Element, Length, Task};
-use std::time::{Duration, Instant};
+use iced::{Color, Task};
+use std::collections::HashMap;
+use std::time::Instant;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::{error, info};
 
@@ -48,7 +47,7 @@ pub enum Message {
 pub struct IcedApp {
     frame_count: u64,
     start_time: Instant,
-    button_states: Vec<bool>,
+    counter: u32,
     animation_enabled: bool,
     hue: f32,
     width: u32,
@@ -60,7 +59,7 @@ impl IcedApp {
         Self {
             frame_count: 0,
             start_time: Instant::now(),
-            button_states: vec![false; 4],
+            counter: 0,
             animation_enabled: true,
             hue: 0.0,
             width,
@@ -78,12 +77,8 @@ impl IcedApp {
             }
             Message::ButtonPressed(label) => {
                 info!("Button pressed: {}", label);
-                match label.as_str() {
-                    "Button 1" => self.button_states[0] = !self.button_states[0],
-                    "Button 2" => self.button_states[1] = !self.button_states[1],
-                    "Button 3" => self.button_states[2] = !self.button_states[2],
-                    "Button 4" => self.button_states[3] = !self.button_states[3],
-                    _ => {}
+                if label == "Counter" {
+                    self.counter += 1;
                 }
             }
             Message::ToggleAnimation => {
@@ -92,123 +87,6 @@ impl IcedApp {
             }
         }
         Task::none()
-    }
-
-    fn view(&self) -> Element<'_, Message> {
-        let elapsed = self.start_time.elapsed().as_secs_f32();
-        let fps = if elapsed > 0.0 {
-            self.frame_count as f32 / elapsed
-        } else {
-            0.0
-        };
-
-        let bg_color = hsl_to_rgb(self.hue, 0.3, 0.15);
-
-        let title = text("Iced on KMS/DRM")
-            .size(56)
-            .style(|_| text::Style {
-                color: Some(Color::WHITE),
-                ..text::Style::default()
-            });
-
-        let subtitle = text("Direct Rendering - No Wayland/X11 Required")
-            .size(24)
-            .style(|_| text::Style {
-                color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
-                ..text::Style::default()
-            });
-
-        let stats = text(format!(
-            "{}x{} | Frames: {} | FPS: {:.1} | Animation: {}",
-            self.width, self.height, self.frame_count, fps,
-            if self.animation_enabled { "ON" } else { "OFF" }
-        ))
-        .size(20)
-        .style(|_| text::Style {
-            color: Some(Color::from_rgb(0.8, 0.8, 0.8)),
-            ..text::Style::default()
-        });
-
-        let buttons_row = row![
-            self.create_button("Button 1", 0),
-            self.create_button("Button 2", 1),
-            self.create_button("Button 3", 2),
-            self.create_button("Button 4", 3),
-        ]
-        .spacing(20);
-
-        let anim_text = if self.animation_enabled { "Pause Animation" } else { "Resume Animation" };
-        let anim_button = button(text(anim_text).size(18))
-            .on_press(Message::ToggleAnimation)
-            .padding(15)
-            .style(|_theme, _status| button::Style {
-                background: Some(iced::Background::Color(Color::from_rgb(0.3, 0.5, 0.8))),
-                text_color: Color::WHITE,
-                ..button::Style::default()
-            });
-
-        let content = column![
-            Space::with_height(Length::FillPortion(1)),
-            title,
-            subtitle,
-            Space::with_height(30),
-            stats,
-            Space::with_height(50),
-            buttons_row,
-            Space::with_height(30),
-            anim_button,
-            Space::with_height(Length::FillPortion(1)),
-        ]
-        .align_x(Horizontal::Center)
-        .spacing(10);
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(move |_| container::Style {
-                background: Some(iced::Background::Color(bg_color)),
-                ..container::Style::default()
-            })
-            .into()
-    }
-
-    fn create_button<'a>(&'a self, label: &'a str, index: usize) -> Element<'a, Message> {
-        let is_active = self.button_states.get(index).copied().unwrap_or(false);
-        let bg_color = if is_active {
-            Color::from_rgb(0.2, 0.8, 0.4)
-        } else {
-            Color::from_rgb(0.3, 0.3, 0.35)
-        };
-
-        button(text(label).size(18))
-            .on_press(Message::ButtonPressed(label.to_string()))
-            .style(move |_theme, status| {
-                let base = bg_color;
-                match status {
-                    button::Status::Hovered => button::Style {
-                        background: Some(iced::Background::Color(Color::from_rgb(
-                            (base.r + 0.1).min(1.0),
-                            (base.g + 0.1).min(1.0),
-                            (base.b + 0.1).min(1.0),
-                        ))),
-                        ..button::Style::default()
-                    },
-                    button::Status::Pressed => button::Style {
-                        background: Some(iced::Background::Color(Color::from_rgb(
-                            (base.r - 0.1).max(0.0),
-                            (base.g - 0.1).max(0.0),
-                            (base.b - 0.1).max(0.0),
-                        ))),
-                        ..button::Style::default()
-                    },
-                    _ => button::Style {
-                        background: Some(iced::Background::Color(base)),
-                        ..button::Style::default()
-                    },
-                }
-            })
-            .padding(20)
-            .into()
     }
 }
 
@@ -245,48 +123,89 @@ fn run_iced_kms(mut display: Display, width: u32, height: u32) -> Result<()> {
         // Update application state
         let _ = app.update(Message::Tick);
 
-        // Get the current view
-        let _view = app.view();
-
-        // Get background color and fill KMS buffer directly
-        // Use higher lightness (0.5) so colors are visible
+        // Get background color
         let bg_color = hsl_to_rgb(app.hue, 0.8, 0.5);
-        let b = (bg_color.b * 255.0) as u8;
-        let g = (bg_color.g * 255.0) as u8;
-        let r = (bg_color.r * 255.0) as u8;
+        let bg_b = (bg_color.b * 255.0) as u8;
+        let bg_g = (bg_color.g * 255.0) as u8;
+        let bg_r = (bg_color.r * 255.0) as u8;
         
-        // Store first pixel for debugging
-        let mut first_pixel: [u8; 4] = [0, 0, 0, 0];
+        // Counter text to display
+        let counter_text = format!("Count: {}", app.counter);
         
         // Write directly to KMS buffer in BGRX format
         if let Err(e) = display.render_frame(|kms_buffer, display_width, display_height| {
             let stride = kms_buffer.len() / display_height as usize;
             
-            // Fill each row with the background color, handling stride
+            // Fill background
             for y in 0..display_height as usize {
                 let row_start = y * stride;
-                // Fill visible portion of the row
                 for x in 0..display_width as usize {
                     let idx = row_start + (x * 4);
                     if idx + 3 < kms_buffer.len() {
-                        kms_buffer[idx] = b;     // B
-                        kms_buffer[idx + 1] = g; // G
-                        kms_buffer[idx + 2] = r; // R
-                        kms_buffer[idx + 3] = 0xFF; // X
+                        kms_buffer[idx] = bg_b;
+                        kms_buffer[idx + 1] = bg_g;
+                        kms_buffer[idx + 2] = bg_r;
+                        kms_buffer[idx + 3] = 0xFF;
                     }
                 }
             }
             
-            // Capture first pixel for debugging
-            first_pixel = [kms_buffer[0], kms_buffer[1], kms_buffer[2], kms_buffer[3]];
+            // Draw cool rectangles
+            let rect_colors = [
+                (0xFF, 0x00, 0x00), // Red
+                (0x00, 0xFF, 0x00), // Green
+                (0x00, 0x00, 0xFF), // Blue
+                (0xFF, 0xFF, 0x00), // Yellow
+            ];
+            
+            for (i, (r, g, b)) in rect_colors.iter().enumerate() {
+                let rect_x = 50 + i * 120;
+                let rect_y = 50;
+                let rect_w = 100;
+                let rect_h = 60;
+                
+                for ry in rect_y..(rect_y + rect_h) {
+                    if ry >= display_height as usize { break; }
+                    let row_start = ry * stride;
+                    for rx in rect_x..(rect_x + rect_w) {
+                        if rx >= display_width as usize { break; }
+                        let idx = row_start + (rx * 4);
+                        if idx + 3 < kms_buffer.len() {
+                            kms_buffer[idx] = *b;
+                            kms_buffer[idx + 1] = *g;
+                            kms_buffer[idx + 2] = *r;
+                            kms_buffer[idx + 3] = 0xFF;
+                        }
+                    }
+                }
+            }
+            
+            // Draw counter button
+            let btn_x = 50;
+            let btn_y = 150;
+            let btn_w = 200;
+            let btn_h = 50;
+            
+            // Button background (orange)
+            for by in btn_y..(btn_y + btn_h) {
+                if by >= display_height as usize { break; }
+                let row_start = by * stride;
+                for bx in btn_x..(btn_x + btn_w) {
+                    if bx >= display_width as usize { break; }
+                    let idx = row_start + (bx * 4);
+                    if idx + 3 < kms_buffer.len() {
+                        kms_buffer[idx] = 0x00;     // B
+                        kms_buffer[idx + 1] = 0x80; // G
+                        kms_buffer[idx + 2] = 0xFF; // R (orange-ish)
+                        kms_buffer[idx + 3] = 0xFF;
+                    }
+                }
+            }
+            
+            // Draw simple text (just white pixels for now)
+            draw_text(kms_buffer, stride, display_width, display_height, &counter_text, 70, 165, 0xFF, 0xFF, 0xFF);
         }) {
             error!("Failed to present frame: {}", e);
-        }
-
-        // Debug: Show buffer info and first pixel
-        if frame_count % 10 == 0 {
-            info!("Frame {}: First pixel BGRX = {:02X} {:02X} {:02X} {:02X} (B={} G={} R={})",
-                  frame_count, first_pixel[0], first_pixel[1], first_pixel[2], first_pixel[3], b, g, r);
         }
 
         frame_count += 1;
@@ -328,4 +247,61 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Color {
     };
 
     Color::from_rgb(r + m, g + m, b + m)
+}
+
+/// Simple text drawing function (8x8 pixel characters)
+fn draw_text(buffer: &mut [u8], stride: usize, width: u32, height: u32, text: &str, x: usize, y: usize, r: u8, g: u8, b: u8) {
+    // Very simple 3x5 font for digits and basic letters
+    let chars: std::collections::HashMap<char, [u8; 15]> = [
+        ('0', [1,1,1, 1,0,1, 1,0,1, 1,0,1, 1,1,1]),
+        ('1', [0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0]),
+        ('2', [1,1,1, 0,0,1, 1,1,1, 1,0,0, 1,1,1]),
+        ('3', [1,1,1, 0,0,1, 1,1,1, 0,0,1, 1,1,1]),
+        ('4', [1,0,1, 1,0,1, 1,1,1, 0,0,1, 0,0,1]),
+        ('5', [1,1,1, 1,0,0, 1,1,1, 0,0,1, 1,1,1]),
+        ('6', [1,1,1, 1,0,0, 1,1,1, 1,0,1, 1,1,1]),
+        ('7', [1,1,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1]),
+        ('8', [1,1,1, 1,0,1, 1,1,1, 1,0,1, 1,1,1]),
+        ('9', [1,1,1, 1,0,1, 1,1,1, 0,0,1, 1,1,1]),
+        ('C', [1,1,1, 1,0,0, 1,0,0, 1,0,0, 1,1,1]),
+        ('o', [0,0,0, 1,1,1, 1,0,1, 1,0,1, 1,1,1]),
+        ('u', [0,0,0, 1,0,1, 1,0,1, 1,0,1, 1,1,1]),
+        ('n', [0,0,0, 1,1,1, 1,0,1, 1,0,1, 1,0,1]),
+        ('t', [0,1,0, 1,1,1, 0,1,0, 0,1,0, 0,1,0]),
+        (' ', [0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0]),
+        (':', [0,0,0, 0,1,0, 0,0,0, 0,1,0, 0,0,0]),
+    ].iter().cloned().collect();
+    
+    let scale = 3; // 3x scale
+    let mut cursor_x = x;
+    
+    for ch in text.chars() {
+        if let Some(bitmap) = chars.get(&ch) {
+            for row in 0..5 {
+                for col in 0..3 {
+                    if bitmap[row * 3 + col] == 1 {
+                        // Draw scaled pixel
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = cursor_x + col * scale + sx;
+                                let py = y + row * scale + sy;
+                                if px < width as usize && py < height as usize {
+                                    let idx = py * stride + px * 4;
+                                    if idx + 3 < buffer.len() {
+                                        buffer[idx] = b;
+                                        buffer[idx + 1] = g;
+                                        buffer[idx + 2] = r;
+                                        buffer[idx + 3] = 0xFF;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            cursor_x += 4 * scale; // character width + spacing
+        } else {
+            cursor_x += 3 * scale; // space for unknown chars
+        }
+    }
 }
