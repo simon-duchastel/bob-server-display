@@ -4,7 +4,7 @@ Simple GPU-accelerated GUI example using Iced with wgpu backend.
 
 ## Running with Sway (Recommended for Kiosk)
 
-**Sway** is a lightweight Wayland compositor perfect for kiosks. It uses ~50MB RAM and gives full control over cursor, display sleep, etc.
+**Sway** is a lightweight Wayland compositor.
 
 ### 1. Install Sway
 
