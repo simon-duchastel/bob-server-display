@@ -4,34 +4,16 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Iced GUI test with software rendering and DRM/KMS display"
+description = "Iced GUI test with GPU-accelerated windowing"
 
 [[bin]]
 name = "iced-test"
 path = "src/main.rs"
 
 [dependencies]
-# Iced GUI framework - using tiny-skia software renderer
-iced = { version = "0.13", default-features = false, features = ["tiny-skia", "image"] }
-
-# DRM/KMS display support through bob-display-core
-bob-display-core = { path = "../../bob-display-core" }
+# Iced GUI framework with GPU-accelerated wgpu backend
+# Uses Vulkan/OpenGL ES on Linux - perfect for Pi 4/5
+iced = { version = "0.13", features = ["wgpu", "image", "tokio"] }
 
 # Async runtime
-tokio = { version = "1.35", features = ["full"] }
-
-# Error handling
-anyhow = "1.0"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# Image handling for iced
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-
-# Time for animations
-chrono = "0.4"
-
-# Tiny-skia for software rendering
-tiny-skia = "0.11"
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
