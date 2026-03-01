@@ -2,52 +2,87 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check
+  build:
+    name: Build
     runs-on: ubuntu-latest
+    
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-action@stable
-
-    - name: Cache cargo registry
-      uses: actions/cache@v4
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgbm-dev libdrm-dev pkg-config
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
       with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache cargo index
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v4
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
+        toolchain: stable
+        components: rustfmt, clippy
+    
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build workspace
+      run: cargo build --workspace --release
+    
     - name: Check formatting
-      run: cargo fmt -- --check
-
+      run: cargo fmt --all -- --check
+    
     - name: Run clippy
-      run: cargo clippy -- -D warnings
-
-    - name: Build
-      run: cargo build --verbose
-
+      run: cargo clippy --workspace -- -D warnings
+    
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --workspace
 
-    - name: Build release
-      run: cargo build --release --verbose
+  build-aarch64:
+    name: Build (ARM64)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install cross-compilation toolchain and ARM64 libraries
+      run: |
+        # Configure apt to use ports.ubuntu.com for arm64 packages
+        sudo dpkg --add-architecture arm64
+        # Create apt config to use ports.ubuntu.com for arm64
+        echo 'Acquire::Architectures::Order "amd64";\nAcquire::Architectures "amd64 arm64";' | sudo tee /etc/apt/apt.conf.d/99architectures
+        # Add ports.ubuntu.com for arm64
+        echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe restricted multiverse' | sudo tee /etc/apt/sources.list.d/arm64-ports.list
+        echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe restricted multiverse' | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
+        echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-backports main universe restricted multiverse' | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
+        # Update but ignore errors from security repo for arm64
+        sudo apt-get update || true
+        # Install cross-compiler and ARM64 libraries
+        sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross libgbm-dev:arm64 libdrm-dev:arm64 libfontconfig-dev:arm64 pkg-config || {
+          echo "Retrying with --fix-missing..."
+          sudo apt-get install -y --fix-missing gcc-aarch64-linux-gnu libc6-dev-arm64-cross libgbm-dev:arm64 libdrm-dev:arm64 libfontconfig-dev:arm64 pkg-config
+        }
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        targets: aarch64-unknown-linux-gnu
+    
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build for ARM64
+      run: |
+        export CC=aarch64-linux-gnu-gcc
+        # Set pkg-config to find ARM64 libraries
+        export PKG_CONFIG_ALLOW_CROSS=1
+        export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
+        cargo build --workspace --target aarch64-unknown-linux-gnu --release
+      env:
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc

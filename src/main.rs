@@ -1,20 +1,14 @@
-//! Bob Display - Kiosk UI with auto-turn-off display functionality
-//!
-//! Features:
-//! - Auto-turn-off display after configurable period of inactivity
-//! - Tap to wake up the display
-//! - Manual turn-off button with power icon
-//!
-//! Run with: cargo run --release
+mod system;
+mod view;
 
 use iced::time;
-use iced::widget::{button, center, column, container, row, text};
-use iced::Length;
-use iced::{mouse, window, Element, Event, Subscription, Task, Theme};
-use std::time::Instant;
+use iced::widget::{button, center, container, mouse_area, text};
+use iced::{mouse, window, Element, Event, Length, Subscription, Task, Theme};
+use std::time::{Duration, Instant};
+use system::{SystemMonitor, SystemStats};
 
 /// Configuration for display auto-turn-off behavior
-mod config {
+pub mod config {
     use std::time::Duration;
 
     /// Duration of inactivity before display turns off (default: 10 minutes)
@@ -24,17 +18,18 @@ mod config {
     pub const CHECK_INTERVAL: Duration = Duration::from_secs(1);
 
     /// Size of the turn-off button
-    pub const BUTTON_SIZE: f32 = 80.0;
+    pub const BUTTON_SIZE: f32 = 60.0;
 
     /// Size of the icon inside the button
-    pub const ICON_SIZE: f32 = 40.0;
+    pub const ICON_SIZE: f32 = 30.0;
 }
 
 fn main() -> iced::Result {
     iced::application("Bob Server Display", BobDisplay::update, BobDisplay::view)
         .theme(|_| Theme::Dark)
         .window(window::Settings {
-            size: iced::Size::new(1920.0, 1080.0),
+            size: iced::Size::new(1424.0, 280.0),
+            resizable: false,
             ..window::Settings::default()
         })
         .subscription(BobDisplay::subscription)
@@ -42,66 +37,53 @@ fn main() -> iced::Result {
 }
 
 #[derive(Debug, Clone)]
-enum Message {
+pub enum Message {
+    Tick,
+    StatsUpdated(SystemStats),
     /// Timer tick for checking inactivity
     CheckInactivity,
     /// User interaction detected
     ActivityDetected,
     /// Turn off display button pressed
     TurnOffDisplay,
-    /// Button pressed
-    ButtonPressed(String),
 }
 
 struct BobDisplay {
+    stats: SystemStats,
+    system_monitor: SystemMonitor,
     /// Whether the display is currently off
     display_off: bool,
     /// Last time user activity was detected
     last_activity: Instant,
-    /// Start time for FPS calculation
-    start_time: Instant,
-    /// Frame counter
-    frame_count: u64,
-    /// Demo counter
-    counter: u32,
 }
 
 impl BobDisplay {
     fn new() -> (Self, Task<Message>) {
+        let mut system_monitor = SystemMonitor::new();
+        let initial_stats = system_monitor.refresh();
         let now = Instant::now();
+
         (
             Self {
+                stats: initial_stats,
+                system_monitor,
                 display_off: false,
                 last_activity: now,
-                start_time: now,
-                frame_count: 0,
-                counter: 0,
             },
-            window::get_latest().and_then(|id| window::change_mode(id, window::Mode::Fullscreen)),
+            window::get_latest()
+                .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)])),
         )
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        // Subscribe to timer events for inactivity checking
-        let timer_subscription =
-            time::every(config::CHECK_INTERVAL).map(|_| Message::CheckInactivity);
-
-        // Subscribe to all events to detect activity
-        let event_subscription = iced::event::listen().map(|event| {
-            match event {
-                // Detect mouse movement, clicks, and touch events
-                Event::Mouse(mouse::Event::CursorMoved { .. })
-                | Event::Mouse(mouse::Event::ButtonPressed(_))
-                | Event::Mouse(mouse::Event::ButtonReleased(_)) => Message::ActivityDetected,
-                _ => Message::CheckInactivity,
-            }
-        });
-
-        Subscription::batch([timer_subscription, event_subscription])
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Tick => {
+                let stats = self.system_monitor.refresh();
+                self.stats = stats;
+            }
+            Message::StatsUpdated(_stats) => {
+                // This variant exists for potential async updates in the future
+            }
             Message::CheckInactivity => {
                 if !self.display_off {
                     let elapsed = self.last_activity.elapsed();
@@ -109,7 +91,6 @@ impl BobDisplay {
                         self.display_off = true;
                     }
                 }
-                self.frame_count += 1;
             }
             Message::ActivityDetected => {
                 if self.display_off {
@@ -120,12 +101,6 @@ impl BobDisplay {
             }
             Message::TurnOffDisplay => {
                 self.display_off = true;
-            }
-            Message::ButtonPressed(label) => {
-                self.last_activity = Instant::now();
-                if label == "Increment" {
-                    self.counter += 1;
-                }
             }
         }
         Task::none()
@@ -142,33 +117,28 @@ impl BobDisplay {
     fn view_screen_off(&self) -> Element<'_, Message> {
         // When screen is off, show a black container that captures all interactions
         // Tapping anywhere will wake the display
-        container(center(
-            text(""), // Empty text, just need something
-        ))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                0.0, 0.0, 0.0,
-            ))),
-            ..Default::default()
-        })
+        mouse_area(
+            container(center(text("")))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(|_theme| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(iced::Color::from_rgb(
+                        0.0, 0.0, 0.0,
+                    ))),
+                    ..Default::default()
+                }),
+        )
+        .on_press(Message::ActivityDetected)
         .into()
     }
 
     fn view_main_screen(&self) -> Element<'_, Message> {
-        let elapsed = self.start_time.elapsed().as_secs_f32();
-        let fps = if elapsed > 0.0 {
-            self.frame_count as f32 / elapsed
-        } else {
-            0.0
-        };
-
         let time_remaining =
             config::INACTIVITY_TIMEOUT.saturating_sub(self.last_activity.elapsed());
         let time_remaining_mins = time_remaining.as_secs() / 60;
         let time_remaining_secs = time_remaining.as_secs() % 60;
 
+        // Turn-off button with square icon
         let turn_off_button = button(
             center(
                 // Square icon for turn-off button
@@ -181,38 +151,36 @@ impl BobDisplay {
         .width(Length::Fixed(config::BUTTON_SIZE))
         .height(Length::Fixed(config::BUTTON_SIZE));
 
-        let content = column![
-            row![text("Bob Server Display").size(40),].spacing(20),
-            row![
-                text(format!("FPS: {:.1}", fps)).size(24),
-                text(format!("Frames: {}", self.frame_count)).size(24),
-            ]
-            .spacing(20),
-            row![
-                text(format!("Counter: {}", self.counter)).size(30),
-                button("Increment").on_press(Message::ButtonPressed("Increment".to_string())),
-            ]
-            .spacing(20),
-            row![text(format!(
-                "Auto-off in: {:02}:{:02}",
-                time_remaining_mins, time_remaining_secs
-            ))
-            .size(20),]
-            .spacing(20),
-            // Turn off display button with icon
-            row![text("Tap to turn off:").size(20), turn_off_button,]
-                .spacing(10)
-                .align_y(iced::Alignment::Center),
-            text("Running in fullscreen GPU-accelerated mode").size(16),
-        ]
-        .spacing(30)
-        .align_x(iced::Alignment::Center);
+        view::build_view_with_controls(
+            &self.stats,
+            time_remaining_mins,
+            time_remaining_secs,
+            turn_off_button.into(),
+        )
+    }
 
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+    fn subscription(&self) -> Subscription<Message> {
+        // Subscribe to timer events for stats update and inactivity checking
+        let stats_subscription = time::every(Duration::from_secs(5)).map(|_| Message::Tick);
+
+        let inactivity_check_subscription =
+            time::every(config::CHECK_INTERVAL).map(|_| Message::CheckInactivity);
+
+        // Subscribe to all events to detect activity
+        let event_subscription = iced::event::listen().map(|event| {
+            match event {
+                // Detect mouse movement, clicks, and touch events
+                Event::Mouse(mouse::Event::CursorMoved { .. })
+                | Event::Mouse(mouse::Event::ButtonPressed(_))
+                | Event::Mouse(mouse::Event::ButtonReleased(_)) => Message::ActivityDetected,
+                _ => Message::CheckInactivity,
+            }
+        });
+
+        Subscription::batch([
+            stats_subscription,
+            inactivity_check_subscription,
+            event_subscription,
+        ])
     }
 }

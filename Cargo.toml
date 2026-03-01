@@ -16,3 +16,6 @@ iced = { version = "0.13", features = ["wgpu", "advanced", "tokio"] }
 
 # Async runtime
 tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
+
+# System information for CPU, RAM, network, temperature
+sysinfo = "0.33"
