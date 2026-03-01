@@ -4,7 +4,7 @@ GPU-accelerated kiosk display for my personal server.
 
 ## Running with Sway (Kiosk Mode)
 
-**Sway** is a lightweight Wayland compositor - perfect for embedded displays.
+**Sway** is a lightweight Wayland compositor.
 
 ### 1. Install Sway
 
