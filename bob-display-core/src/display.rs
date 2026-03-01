@@ -36,9 +36,12 @@ pub struct Display {
     width: u32,
     height: u32,
     framebuffer: framebuffer::Handle,
-    crtc: crtc::Handle,
-    connector: drm::control::connector::Handle,
-    mode: drm::control::Mode,
+    #[allow(dead_code)]
+    _crtc: crtc::Handle,
+    #[allow(dead_code)]
+    _connector: drm::control::connector::Handle,
+    #[allow(dead_code)]
+    _mode: drm::control::Mode,
 }
 
 impl Display {
@@ -163,9 +166,9 @@ impl Display {
             width,
             height,
             framebuffer: fb,
-            crtc,
-            connector,
-            mode,
+            _crtc: crtc,
+            _connector: connector,
+            _mode: mode,
         })
     }
 
@@ -190,11 +193,6 @@ impl Display {
                 let buffer_slice = mapped.buffer_mut();
                 render_fn(buffer_slice, self.width, self.height);
             })?;
-
-        // Re-set CRTC to trigger display update
-        self.gbm_device
-            .set_crtc(self.crtc, Some(self.framebuffer), (0, 0), &[self.connector], Some(self.mode))
-            .context("Failed to refresh CRTC")?;
 
         Ok(())
     }

@@ -3,6 +3,7 @@ members = [
     "bob-display-core",
     "examples/test_display",
     "examples/slint_test",
+    "examples/iced_test",
 ]
 resolver = "2"
 
