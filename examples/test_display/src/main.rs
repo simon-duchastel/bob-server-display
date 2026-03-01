@@ -7,6 +7,7 @@ use anyhow::Result;
 use bob_display_core::{Config, Display, Renderer};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::{error, info};
+use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -26,7 +27,7 @@ async fn main() -> Result<()> {
     info!("Configuration loaded successfully");
 
     // Initialize display
-    let display = Display::new(&config)?;
+    let mut display = Display::new(&config)?;
     let width = display.width();
     let height = display.height();
     info!("Display initialized: {}x{}", width, height);
@@ -35,10 +36,10 @@ async fn main() -> Result<()> {
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;
 
-    // Create a custom renderer for the test pattern
+    // Create renderer
     let mut renderer = Renderer::new(width, height, &config)?;
     
-    info!("Entering main display loop - printing TEST TEST TEST");
+    info!("Entering main display loop");
     
     loop {
         tokio::select! {
@@ -56,51 +57,43 @@ async fn main() -> Result<()> {
 
             // Render frame
             _ = tokio::time::sleep(tokio::time::Duration::from_millis(16)) => {
-                if let Err(e) = render_test_pattern(&mut renderer, width, height) {
+                // Clear and render to renderer buffer
+                if let Err(e) = renderer.render() {
                     error!("Render error: {}", e);
+                }
+                
+                // Copy renderer buffer to display accounting for stride
+                if let Err(e) = display.render_frame(|display_buffer, display_width, display_height| {
+                    let renderer_buffer = renderer.buffer();
+                    let stride = display_buffer.len() / display_height as usize;
+                    let bytes_per_pixel = 4;
+                    
+                    info!("Copying renderer to display: {}x{}, stride={}, renderer_bytes={}", 
+                          display_width, display_height, stride, renderer_buffer.len());
+                    
+                    // Copy row by row to handle stride padding
+                    for y in 0..display_height as usize {
+                        let display_row_start = y * stride;
+                        let renderer_row_start = y * (display_width as usize * bytes_per_pixel);
+                        
+                        let display_row_end = display_row_start + (display_width as usize * bytes_per_pixel);
+                        let renderer_row_end = renderer_row_start + (display_width as usize * bytes_per_pixel);
+                        
+                        if display_row_end <= display_buffer.len() && renderer_row_end <= renderer_buffer.len() {
+                            display_buffer[display_row_start..display_row_end]
+                                .copy_from_slice(&renderer_buffer[renderer_row_start..renderer_row_end]);
+                        } else {
+                            error!("Row {} out of bounds! display_end={}, display_len={}, renderer_end={}, renderer_len={}", 
+                                  y, display_row_end, display_buffer.len(), renderer_row_end, renderer_buffer.len());
+                        }
+                    }
+                }) {
+                    error!("Display render error: {}", e);
                 }
             }
         }
     }
 
     info!("Shutting down test display");
-    Ok(())
-}
-
-/// Renders "TEST TEST TEST" repeatedly across the screen
-fn render_test_pattern(renderer: &mut Renderer, width: u32, height: u32) -> Result<()> {
-    // Clear with black background
-    renderer.clear([0, 0, 0, 255]);
-    
-    // Test text to display
-    const TEST_TEXT: &str = "TEST TEST TEST ";
-    const FONT_SIZE: u32 = 32;
-    const LINE_HEIGHT: i32 = 40;
-    const TEXT_COLOR: [u8; 4] = [0, 255, 0, 255]; // Green
-    
-    // Calculate how many times "TEST TEST TEST" fits across the screen
-    let char_width = (FONT_SIZE as f32 * 0.6) as i32; // Approximate character width
-    let text_width = TEST_TEXT.len() as i32 * char_width;
-    
-    // Fill the screen with repeated "TEST TEST TEST" lines
-    let mut y = 10;
-    while y < height as i32 - LINE_HEIGHT {
-        let mut x = 10;
-        
-        // Keep printing the text until we reach the edge of the screen
-        while x < width as i32 - text_width {
-            renderer.draw_text(TEST_TEXT, x, y, FONT_SIZE, TEXT_COLOR);
-            x += text_width;
-        }
-        
-        y += LINE_HEIGHT;
-    }
-    
-    // Add a border around the screen
-    renderer.draw_rect(0, 0, width, 5, [255, 0, 0, 255]); // Top border (red)
-    renderer.draw_rect(0, height as i32 - 5, width, 5, [255, 0, 0, 255]); // Bottom border (red)
-    renderer.draw_rect(0, 0, 5, height, [255, 0, 0, 255]); // Left border (red)
-    renderer.draw_rect(width as i32 - 5, 0, 5, height, [255, 0, 0, 255]); // Right border (red)
-    
     Ok(())
 }

@@ -10,7 +10,6 @@ use std::os::unix::fs::OpenOptionsExt;
 use tracing::info;
 
 use crate::config::Config;
-use crate::render::Renderer;
 
 /// Wrapper struct around File that implements the DRM Device traits
 #[derive(Debug)]
@@ -33,12 +32,13 @@ impl ControlDevice for DrmDevice {}
 
 pub struct Display {
     gbm_device: gbm::Device<DrmDevice>,
+    buffer: gbm::BufferObject<()>,
     width: u32,
     height: u32,
-    renderer: Renderer,
-    framebuffer: Option<framebuffer::Handle>,
+    framebuffer: framebuffer::Handle,
     crtc: crtc::Handle,
     connector: drm::control::connector::Handle,
+    mode: drm::control::Mode,
 }
 
 impl Display {
@@ -99,13 +99,11 @@ impl Display {
         info!("Selected mode: {}x{} @ {}Hz", width, height, mode.vrefresh());
 
         // Find a suitable CRTC for this connector
-        // First, try to find the CRTC that's currently driving this connector
         let mut selected_crtc = None;
         
         // Check which encoders are possible for this connector
         for &encoder_id in connector_info.encoders() {
             if let Ok(encoder_info) = gbm_device.get_encoder(encoder_id) {
-                // If encoder has a CRTC, check if it's in our resources
                 if let Some(crtc_id) = encoder_info.crtc() {
                     if resources.crtcs().contains(&crtc_id) {
                         selected_crtc = Some(crtc_id);
@@ -137,49 +135,38 @@ impl Display {
 
         info!("Using CRTC: {:?}", crtc);
 
-        let mut display = Self {
-            gbm_device,
-            width,
-            height,
-            renderer: Renderer::new(width, height, config)?,
-            framebuffer: None,
-            crtc,
-            connector,
-        };
-
-        // Initialize the display
-        display.init_framebuffer(mode)?;
-
-        Ok(display)
-    }
-
-    fn init_framebuffer(&mut self, mode: drm::control::Mode) -> Result<()> {
         // Create a GBM buffer
-        let buffer = self
-            .gbm_device
+        let buffer = gbm_device
             .create_buffer_object::<()>(
-                self.width,
-                self.height,
+                width,
+                height,
                 gbm::Format::Xrgb8888,
-                BufferObjectFlags::SCANOUT | BufferObjectFlags::RENDERING,
+                BufferObjectFlags::SCANOUT | BufferObjectFlags::WRITE,
             )
             .map_err(|_| anyhow!("Failed to create GBM buffer"))?;
 
         // Create DRM framebuffer from GBM buffer using GBM's helper method
-        let fb = self.gbm_device
+        let fb = gbm_device
             .add_framebuffer(&buffer, 24, 32)
             .map_err(|_| anyhow!("Failed to create framebuffer"))?;
 
-        self.framebuffer = Some(fb);
-
         // Set the CRTC to display the framebuffer with the selected mode
-        self.gbm_device
-            .set_crtc(self.crtc, Some(fb), (0, 0), &[self.connector], Some(mode))
+        gbm_device
+            .set_crtc(crtc, Some(fb), (0, 0), &[connector], Some(mode))
             .context("Failed to set CRTC")?;
 
-        info!("Framebuffer initialized successfully");
+        info!("Display initialized successfully");
 
-        Ok(())
+        Ok(Self {
+            gbm_device,
+            buffer,
+            width,
+            height,
+            framebuffer: fb,
+            crtc,
+            connector,
+            mode,
+        })
     }
 
     pub fn width(&self) -> u32 {
@@ -190,12 +177,24 @@ impl Display {
         self.height
     }
 
-    pub fn render_frame(&mut self) -> Result<()> {
-        // Render to the framebuffer using our renderer
-        self.renderer.render()?;
+    pub fn render_frame<F>(&mut self, render_fn: F) -> Result<()>
+    where
+        F: FnOnce(&mut [u8], u32, u32),
+    {
+        // Map the buffer for writing using map_mut for mutable access
+        let stride = self.buffer.stride();
+        info!("GBM stride: {:?}, expected minimum: {}", stride, (self.width * 4));
+        
+        let _ = self.buffer
+            .map_mut(&self.gbm_device, 0, 0, self.width, self.height, |mapped| {
+                let buffer_slice = mapped.buffer_mut();
+                render_fn(buffer_slice, self.width, self.height);
+            })?;
 
-        // Flip the buffer (if using double buffering - for now we render directly)
-        // In a more advanced implementation, we'd use page flipping here
+        // Re-set CRTC to trigger display update
+        self.gbm_device
+            .set_crtc(self.crtc, Some(self.framebuffer), (0, 0), &[self.connector], Some(self.mode))
+            .context("Failed to refresh CRTC")?;
 
         Ok(())
     }
@@ -204,9 +203,7 @@ impl Display {
 impl Drop for Display {
     fn drop(&mut self) {
         // Cleanup DRM resources
-        if let Some(fb) = self.framebuffer {
-            let _ = self.gbm_device.destroy_framebuffer(fb);
-        }
+        let _ = self.gbm_device.destroy_framebuffer(self.framebuffer);
         info!("Display resources cleaned up");
     }
 }
