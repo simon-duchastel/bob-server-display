@@ -1,110 +1,67 @@
-//! Simple Iced kiosk example using standard windowing
-//! 
-//! This uses Iced's built-in wgpu backend for GPU-accelerated rendering
-//! Run with: cargo run --example iced_test --release
+mod system;
+mod view;
 
-use iced::{Element, Task, Theme, window};
-use iced::widget::{column, row, button, text, container};
-use iced::Length;
-use std::time::Instant;
+use iced::time;
+use iced::{window, Element, Task, Theme};
+use std::time::Duration;
+use system::{SystemMonitor, SystemStats};
 
 fn main() -> iced::Result {
     iced::application("Bob Server Display", BobDisplay::update, BobDisplay::view)
         .theme(|_| Theme::Dark)
         .window(window::Settings {
-            size: iced::Size::new(1920.0, 1080.0),
+            size: iced::Size::new(1424.0, 280.0),
+            resizable: false,
             ..window::Settings::default()
         })
+        .subscription(BobDisplay::subscription)
         .run_with(BobDisplay::new)
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Tick,
+    StatsUpdated(SystemStats),
+}
+
+struct BobDisplay {
+    stats: SystemStats,
+    system_monitor: SystemMonitor,
 }
 
 impl BobDisplay {
     fn new() -> (Self, Task<Message>) {
+        let mut system_monitor = SystemMonitor::new();
+        let initial_stats = system_monitor.refresh();
+
         (
-            Self::default(),
-            window::get_latest().and_then(|id| {
-                Task::batch([
-                    window::change_mode(id, window::Mode::Fullscreen),
-                    window::change_cursor(id, iced::mouse::Cursor::None),
-                ])
-            }),
+            Self {
+                stats: initial_stats,
+                system_monitor,
+            },
+            window::get_latest()
+                .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)])),
         )
     }
-}
 
-#[derive(Debug, Clone)]
-enum Message {
-    Tick,
-    ButtonPressed(String),
-}
-
-struct BobDisplay {
-    start_time: Instant,
-    frame_count: u64,
-    counter: u32,
-}
-
-impl Default for BobDisplay {
-    fn default() -> Self {
-        Self {
-            start_time: Instant::now(),
-            frame_count: 0,
-            counter: 0,
-        }
-    }
-}
-
-impl BobDisplay {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => {
-                self.frame_count += 1;
+                let stats = self.system_monitor.refresh();
+                self.stats = stats;
             }
-            Message::ButtonPressed(label) => {
-                if label == "Increment" {
-                    self.counter += 1;
-                }
+            Message::StatsUpdated(_stats) => {
+                // This variant exists for potential async updates in the future
             }
         }
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
-        let elapsed = self.start_time.elapsed().as_secs_f32();
-        let fps = if elapsed > 0.0 {
-            self.frame_count as f32 / elapsed
-        } else {
-            0.0
-        };
+    fn view(&self) -> Element<'_, Message> {
+        view::build_view(&self.stats)
+    }
 
-        let content = column![
-            row![
-                text("Bob Server Display").size(40),
-            ]
-            .spacing(20),
-            
-            row![
-                text(format!("FPS: {:.1}", fps)).size(24),
-                text(format!("Frames: {}", self.frame_count)).size(24),
-            ]
-            .spacing(20),
-            
-            row![
-                text(format!("Counter: {}", self.counter)).size(30),
-                button("Increment").on_press(Message::ButtonPressed("Increment".to_string())),
-            ]
-            .spacing(20),
-            
-            text("Running in fullscreen GPU-accelerated mode").size(16),
-        ]
-        .spacing(30)
-        .align_x(iced::Alignment::Center);
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+    fn subscription(&self) -> iced::Subscription<Message> {
+        time::every(Duration::from_secs(5)).map(|_| Message::Tick)
     }
 }
