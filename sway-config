@@ -16,7 +16,7 @@ bar {
 output * bg #000000 solid_color
 
 # Auto-start the display app
-exec /home/pi/bob-server-display/target/release/iced-test
+exec /home/pi/bob-display/target/release/bob-display
 
 # Disable all keybindings for kiosk mode
 # (or keep minimal: Alt+F4 to exit, etc.)
