@@ -20,16 +20,6 @@ Copy the provided config:
 mkdir -p ~/.config/sway
 cp examples/iced_test/sway-config ~/.config/sway/config
 
-# Edit the config to set your app path
-nano ~/.config/sway/config
-```
-
-Key settings in the config:
-- `seat * hide_cursor 1` - Hides cursor after 1ms (works without mouse)
-- `exec swaymsg seat seat0 cursor move 9999 9999` - Moves cursor off-screen on startup
-- `default_border none` - No window decorations
-- `exec /path/to/iced-test` - Auto-starts your app
-
 ### 3. Run Sway
 
 ```bash
