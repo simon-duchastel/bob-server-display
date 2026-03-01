@@ -194,9 +194,6 @@ impl Display {
                 render_fn(buffer_slice, self.width, self.height);
             })?;
 
-        // Don't call set_crtc here - it's already set during initialization
-        // and calling it every frame can cause issues
-
         Ok(())
     }
 }
