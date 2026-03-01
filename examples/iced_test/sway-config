@@ -1,0 +1,26 @@
+# Sway config for Bob Display kiosk
+# Place at ~/.config/sway/config or /etc/sway/config
+
+# Hide cursor after 1ms (works even without mouse movement)
+seat * hide_cursor 1
+
+# Disable window decorations
+default_border none
+
+# Disable status bar
+bar {
+    mode hide
+}
+
+# Set background color (black)
+output * bg #000000 solid_color
+
+# Move cursor off-screen immediately
+exec sleep 0.5 && swaymsg seat seat0 cursor move 9999 9999
+
+# Auto-start the display app
+exec /home/pi/bob-server-display/target/release/iced-test
+
+# Disable all keybindings for kiosk mode
+# (or keep minimal: Alt+F4 to exit, etc.)
+ bindsym Mod1+Shift+e exit
