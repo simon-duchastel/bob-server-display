@@ -12,8 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 # Iced GUI framework with GPU-accelerated wgpu backend
-# Uses Vulkan/OpenGL ES on Linux - perfect for Pi 4/5
-# "advanced" feature enables touch input support on embedded/Wayland displays
 iced = { version = "0.13", features = ["wgpu", "advanced", "tokio"] }
 
 # Async runtime
