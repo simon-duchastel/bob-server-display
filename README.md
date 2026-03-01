@@ -1,100 +1,73 @@
-# Bob Server Display
+# Bob Display
 
-A minimal, efficient display service for Raspberry Pi using DRM/KMS directly - no desktop environment required.
+GPU-accelerated kiosk display running on Sway Wayland compositor.
 
-## Quick Start
+## Running with Sway (Kiosk Mode)
 
-### 1. Build the Project
+**Sway** is a lightweight Wayland compositor - perfect for embedded displays.
+
+### 1. Install Sway
 
 ```bash
-# Install Rust if not already installed
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+sudo apt install sway swayidle
+```
 
-# Clone and build
-git clone https://github.com/simon-duchastel/bob-server-display.git
-cd bob-server-display
+### 2. Configure Sway
+
+Copy the provided config:
+
+```bash
+mkdir -p ~/.config/sway
+cp sway-config ~/.config/sway/config
+```
+
+### 3. Build and Run
+
+```bash
+# Build the release binary
 cargo build --release
+
+# Run sway (it will auto-start bob-display)
+sway
+
+# Or with debug output
+sway -d -V 2>&1 | tee sway.log
 ```
 
-### 2. Install
+### 4. Auto-start on Boot (systemd)
 
-```bash
-# Create system user and directories
-sudo ./scripts/install.sh
+Create `/etc/systemd/system/bob-display.service`:
 
-# Copy binary
-sudo cp target/release/bob-server-display /opt/bob-display/
-sudo chmod +x /opt/bob-display/bob-server-display
+```ini
+[Unit]
+Description=Bob Display Kiosk
+After=systemd-user-sessions.service
 
-# Copy default config
-sudo cp config/default.toml /etc/bob-display/config.toml
-sudo chmod 644 /etc/bob-display/config.toml
+[Service]
+Type=simple
+User=pi
+Environment="WLR_BACKENDS=drm"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+ExecStart=/usr/bin/sway
+Restart=always
+RestartSec=5
 
-# Copy systemd service
-sudo cp systemd/bob-display.service /etc/systemd/system/
-sudo systemctl daemon-reload
+[Install]
+WantedBy=graphical.target
 ```
 
-### 3. Configure Display Permissions
-
-Add the service user to the `video` group:
-
-```bash
-sudo usermod -a -G video bob-display
-```
-
-If using a Raspberry Pi with specific DRM permissions, you may need to adjust udev rules:
-
-```bash
-# Create udev rule for DRM access
-sudo tee /etc/udev/rules.d/99-bob-display.rules << 'EOF'
-SUBSYSTEM=="drm", KERNEL=="card*", TAG+="uaccess", TAG+="seat"
-SUBSYSTEM=="drm", KERNEL=="renderD*", TAG+="uaccess"
-EOF
-sudo udevadm control --reload-rules
-```
-
-### 4. Start the Service
-
+Enable and start:
 ```bash
 sudo systemctl enable bob-display
 sudo systemctl start bob-display
 ```
 
-Check status:
+## Development
 
 ```bash
-sudo systemctl status bob-display
-sudo journalctl -u bob-display -f
-```
+# Run in windowed mode for development
+cargo run
 
-## Configuration
-
-Edit `/etc/bob-display/config.toml`:
-
-```toml
-# DRM device path (usually /dev/dri/card0 on Raspberry Pi)
-drm_device = "/dev/dri/card0"
-
-# Display mode (optional - auto-detect if not specified)
-[mode]
-width = 1920
-height = 1080
-refresh_rate = 60
-
-# Colors (RGBA format)
-background_color = [0, 0, 0, 255]    # Black
-text_color = [255, 255, 255, 255]    # White
-
-# Font settings
-font_size = 24.0
-
-# Performance
-target_fps = 60
-```
-
-**Note:** Configuration changes require a service restart:
-
-```bash
-sudo systemctl restart bob-display
+# Run fullscreen release build
+cargo run --release
 ```

@@ -1,15 +1,20 @@
-[workspace]
-members = [
-    "bob-display-core",
-    "examples/test_display",
-    "examples/slint_test",
-    "examples/iced_test",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "bob-display"
 version = "0.1.0"
 edition = "2021"
 authors = ["Simon Duchastel <simon@duchastel.com>"]
 license = "MIT"
-repository = "https://github.com/simon-duchastel/bob-server-display"
+description = "Bob Display - GPU-accelerated kiosk display for Sway"
+
+[[bin]]
+name = "bob-display"
+path = "src/main.rs"
+
+[dependencies]
+# Iced GUI framework with GPU-accelerated wgpu backend
+# Uses Vulkan/OpenGL ES on Linux - perfect for Pi 4/5
+# "advanced" feature enables touch input support on embedded/Wayland displays
+iced = { version = "0.13", features = ["wgpu", "advanced", "tokio"] }
+
+# Async runtime
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
