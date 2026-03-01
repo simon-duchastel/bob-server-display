@@ -185,16 +185,14 @@ impl Display {
         let stride = self.buffer.stride();
         info!("GBM stride: {:?}, expected minimum: {}", stride, (self.width * 4));
         
-        let _ = self.buffer
+        self.buffer
             .map_mut(&self.gbm_device, 0, 0, self.width, self.height, |mapped| {
                 let buffer_slice = mapped.buffer_mut();
                 render_fn(buffer_slice, self.width, self.height);
             })?;
 
-        // Re-set CRTC to trigger display update
-        self.gbm_device
-            .set_crtc(self.crtc, Some(self.framebuffer), (0, 0), &[self.connector], Some(self.mode))
-            .context("Failed to refresh CRTC")?;
+        // Don't call set_crtc here - it's already set during initialization
+        // and calling it every frame can cause issues
 
         Ok(())
     }

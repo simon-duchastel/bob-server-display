@@ -3,11 +3,11 @@
 //! This example uses the iced GUI framework with a custom rendering pipeline
 //! that outputs directly to KMS/DRM, bypassing Wayland/X11 entirely.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bob_display_core::{Config, Display};
-use iced::alignment::{Horizontal, Vertical};
+use iced::alignment::Horizontal;
 use iced::widget::{button, column, container, row, text, Space};
-use iced::{Color, Element, Length, Subscription, Task, Theme};
+use iced::{Color, Element, Length, Task};
 use std::time::{Duration, Instant};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::{error, info};
@@ -68,10 +68,6 @@ impl IcedApp {
         }
     }
 
-    fn title(&self) -> String {
-        String::from("Iced KMS Direct Rendering")
-    }
-
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => {
@@ -98,7 +94,7 @@ impl IcedApp {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let elapsed = self.start_time.elapsed().as_secs_f32();
         let fps = if elapsed > 0.0 {
             self.frame_count as f32 / elapsed
@@ -176,11 +172,7 @@ impl IcedApp {
             .into()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick)
-    }
-
-    fn create_button(&self, label: &str, index: usize) -> Element<Message> {
+    fn create_button<'a>(&'a self, label: &'a str, index: usize) -> Element<'a, Message> {
         let is_active = self.button_states.get(index).copied().unwrap_or(false);
         let bg_color = if is_active {
             Color::from_rgb(0.2, 0.8, 0.4)
@@ -221,76 +213,80 @@ impl IcedApp {
 }
 
 /// Run the iced application with KMS backend
-fn run_iced_kms(display: Display, width: u32, height: u32) -> Result<()> {
+fn run_iced_kms(mut display: Display, width: u32, height: u32) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
-    let _guard = rt.enter();
-
-    let mut sigterm = rt.block_on(async { signal(SignalKind::terminate()) })?;
-    let mut sigint = rt.block_on(async { signal(SignalKind::interrupt()) })?;
 
     let mut app = IcedApp::new(width, height);
-    let mut buffer: Vec<u8> = vec![0u8; (width * height * 4) as usize];
 
     info!("Entering main render loop");
     let start_time = Instant::now();
     let mut frame_count = 0u64;
 
-    loop {
-        // Check for shutdown signals
-        if rt.block_on(async {
+    rt.block_on(async {
+        let mut sigterm = signal(SignalKind::terminate())?;
+        let mut sigint = signal(SignalKind::interrupt())?;
+
+        loop {
+            // Check for shutdown signals with timeout
             tokio::select! {
-                _ = sigterm.recv() => { info!("SIGTERM received, shutting down"); true }
-                _ = sigint.recv() => { info!("SIGINT received, shutting down"); true }
-                else => false
+                _ = sigterm.recv() => {
+                    info!("SIGTERM received, shutting down");
+                    break;
+                }
+                _ = sigint.recv() => {
+                    info!("SIGINT received, shutting down");
+                    break;
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(16)) => {
+                    // Continue with frame rendering
+                }
             }
-        }) {
-            break;
-        }
 
         // Update application state
         let _ = app.update(Message::Tick);
 
         // Get the current view
-        let view = app.view();
+        let _view = app.view();
 
-        // Render the view using tiny-skia
-        // Create a pixmap for rendering
-        let mut pixmap = match tiny_skia::Pixmap::new(width, height) {
-            Some(p) => p,
-            None => {
-                error!("Failed to create pixmap");
-                continue;
+        // Get background color and fill KMS buffer directly
+        // Use higher lightness (0.5) so colors are visible
+        let bg_color = hsl_to_rgb(app.hue, 0.8, 0.5);
+        let b = (bg_color.b * 255.0) as u8;
+        let g = (bg_color.g * 255.0) as u8;
+        let r = (bg_color.r * 255.0) as u8;
+        
+        // Store first pixel for debugging
+        let mut first_pixel: [u8; 4] = [0, 0, 0, 0];
+        
+        // Write directly to KMS buffer in BGRX format
+        if let Err(e) = display.render_frame(|kms_buffer, display_width, display_height| {
+            let stride = kms_buffer.len() / display_height as usize;
+            
+            // Fill each row with the background color, handling stride
+            for y in 0..display_height as usize {
+                let row_start = y * stride;
+                // Fill visible portion of the row
+                for x in 0..display_width as usize {
+                    let idx = row_start + (x * 4);
+                    if idx + 3 < kms_buffer.len() {
+                        kms_buffer[idx] = b;     // B
+                        kms_buffer[idx + 1] = g; // G
+                        kms_buffer[idx + 2] = r; // R
+                        kms_buffer[idx + 3] = 0xFF; // X
+                    }
+                }
             }
-        };
-
-        // Get background color
-        let bg_color = hsl_to_rgb(app.hue, 0.3, 0.15);
-        let skia_bg = tiny_skia::Color::from_rgba(
-            bg_color.r,
-            bg_color.g,
-            bg_color.b,
-            1.0,
-        ).unwrap_or(tiny_skia::Color::from_rgba8(40, 40, 50, 255));
-        pixmap.fill(skia_bg);
-
-        // Convert RGBA to BGRX for KMS
-        let skia_data = pixmap.data();
-        for (i, pixel) in skia_data.chunks_exact(4).enumerate() {
-            let idx = i * 4;
-            if idx + 3 < buffer.len() {
-                buffer[idx] = pixel[2];     // B
-                buffer[idx + 1] = pixel[1]; // G
-                buffer[idx + 2] = pixel[0]; // R
-                buffer[idx + 3] = 0xFF;     // X
-            }
-        }
-
-        // Present to KMS display
-        if let Err(e) = display.render_frame(|kms_buffer, _w, _h| {
-            let len = kms_buffer.len().min(buffer.len());
-            kms_buffer[..len].copy_from_slice(&buffer[..len]);
+            
+            // Capture first pixel for debugging
+            first_pixel = [kms_buffer[0], kms_buffer[1], kms_buffer[2], kms_buffer[3]];
         }) {
             error!("Failed to present frame: {}", e);
+        }
+
+        // Debug: Show buffer info and first pixel
+        if frame_count % 10 == 0 {
+            info!("Frame {}: First pixel BGRX = {:02X} {:02X} {:02X} {:02X} (B={} G={} R={})",
+                  frame_count, first_pixel[0], first_pixel[1], first_pixel[2], first_pixel[3], b, g, r);
         }
 
         frame_count += 1;
@@ -302,11 +298,12 @@ fn run_iced_kms(display: Display, width: u32, height: u32) -> Result<()> {
             info!("FPS: {:.1}", fps);
         }
 
-        // Frame rate limiting (60 FPS)
-        std::thread::sleep(Duration::from_millis(16));
-    }
+        }
 
-    info!("Shutting down after {} frames", frame_count);
+        info!("Shutting down after {} frames", frame_count);
+        Ok::<(), anyhow::Error>(())
+    })?;
+
     Ok(())
 }
 
