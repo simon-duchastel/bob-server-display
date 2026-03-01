@@ -16,4 +16,3 @@ cage -- cargo run --example iced_test --release
 # Or run the built binary
 cage -- ./target/release/iced-test
 ```
-

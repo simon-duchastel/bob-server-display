@@ -22,7 +22,12 @@ impl BobDisplay {
     fn new() -> (Self, Task<Message>) {
         (
             Self::default(),
-            window::get_latest().and_then(|id| window::change_mode(id, window::Mode::Fullscreen)),
+            window::get_latest().and_then(|id| {
+                Task::batch([
+                    window::change_mode(id, window::Mode::Fullscreen),
+                    window::change_cursor(id, iced::mouse::Cursor::None),
+                ])
+            }),
         )
     }
 }
