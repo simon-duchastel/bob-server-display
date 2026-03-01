@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Simon Duchastel <simon@duchastel.com>"]
 license = "MIT"
-description = "Bob Display - GPU-accelerated kiosk display for Sway"
+description = "Bob Display - Kiosk UI for Simon's personal server"
 
 [[bin]]
 name = "bob-display"
