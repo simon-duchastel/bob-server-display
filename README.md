@@ -17,6 +17,14 @@ A minimal, efficient display service for Raspberry Pi using DRM/KMS directly - n
 - HDMI display connected
 - No X11 or Wayland running (pure console/TTY mode)
 - Rust 1.70+ (for building)
+- Build dependencies: `libgbm-dev`, `libdrm-dev`
+
+### Install Build Dependencies (Debian/Ubuntu)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libgbm-dev libdrm-dev
+```
 
 ## Quick Start
 

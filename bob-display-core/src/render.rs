@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use tracing::info;
 
 use crate::config::Config;
@@ -251,9 +251,13 @@ impl Renderer {
         Ok(())
     }
 
-    fn clear(&mut self, color: [u8; 4]) {
+    pub fn clear(&mut self, color: [u8; 4]) {
+        // Convert RGBA [R,G,B,A] to XRGB8888 [B,G,R,X] in memory
         for pixel in self.buffer.chunks_exact_mut(4) {
-            pixel.copy_from_slice(&color);
+            pixel[0] = color[2]; // Blue
+            pixel[1] = color[1]; // Green
+            pixel[2] = color[0]; // Red
+            pixel[3] = color[3]; // Alpha/X
         }
     }
 
@@ -301,7 +305,12 @@ impl Renderer {
         for row in y..(y + height as i32) {
             for col in x..(x + width as i32) {
                 if col >= 0 && col < self.width as i32 && row >= 0 && row < self.height as i32 {
-                    self.set_pixel(col as u32, row as u32, color);
+                    let idx = ((row as u32 * self.width + col as u32) * 4) as usize;
+                    // Convert RGBA [R,G,B,A] to XRGB8888 [B,G,R,X] in memory
+                    self.buffer[idx] = color[2];     // Blue
+                    self.buffer[idx + 1] = color[1]; // Green
+                    self.buffer[idx + 2] = color[0]; // Red
+                    self.buffer[idx + 3] = color[3]; // Alpha/X
                 }
             }
         }
@@ -317,13 +326,12 @@ impl Renderer {
                     let dst_y = y + row as i32;
 
                     if dst_x >= 0 && dst_x < self.width as i32 && dst_y >= 0 && dst_y < self.height as i32 {
-                        let color = [
-                            image_data[src_idx],
-                            image_data[src_idx + 1],
-                            image_data[src_idx + 2],
-                            image_data[src_idx + 3],
-                        ];
-                        self.set_pixel(dst_x as u32, dst_y as u32, color);
+                        let dst_idx = ((dst_y as u32 * self.width + dst_x as u32) * 4) as usize;
+                        // Convert RGBA to XRGB8888 in memory
+                        self.buffer[dst_idx] = image_data[src_idx + 2]; // Blue
+                        self.buffer[dst_idx + 1] = image_data[src_idx + 1]; // Green
+                        self.buffer[dst_idx + 2] = image_data[src_idx]; // Red
+                        self.buffer[dst_idx + 3] = image_data[src_idx + 3]; // Alpha
                     }
                 }
             }
@@ -333,7 +341,11 @@ impl Renderer {
     fn set_pixel(&mut self, x: u32, y: u32, color: [u8; 4]) {
         if x < self.width && y < self.height {
             let idx = ((y * self.width + x) * 4) as usize;
-            self.buffer[idx..idx + 4].copy_from_slice(&color);
+            // Convert RGBA [R,G,B,A] to XRGB8888 [B,G,R,X] in memory
+            self.buffer[idx] = color[2];     // Blue
+            self.buffer[idx + 1] = color[1]; // Green
+            self.buffer[idx + 2] = color[0]; // Red
+            self.buffer[idx + 3] = color[3]; // Alpha/X
         }
     }
 

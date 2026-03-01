@@ -1,43 +1,13 @@
-[package]
-name = "bob-server-display"
+[workspace]
+members = [
+    "bob-display-core",
+    "examples/test_display",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["Simon Duchastel <simon@duchastel.com>"]
-description = "Minimal efficient display service for Raspberry Pi using DRM/KMS"
 license = "MIT"
-
-[dependencies]
-# DRM/KMS for direct display access
-drm = "0.12"
-gbm = "0.15"
-
-# Image handling
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-
-# Configuration
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "journald"] }
-
-# Error handling
-anyhow = "1.0"
-thiserror = "1.0"
-
-# Async runtime (for future extensibility)
-tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "signal"] }
-
-# System signals
-libc = "0.2"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
-
-[profile.dev]
-opt-level = 0
-debug = true
+repository = "https://github.com/simon-duchastel/bob-server-display"
