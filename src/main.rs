@@ -7,7 +7,6 @@ use iced::{mouse, window, Background, Color, Element, Event, Length, Subscriptio
 use std::time::Duration;
 use system::{SystemMonitor, SystemStats};
 
-
 fn main() -> iced::Result {
     iced::application("Bob Server Display", BobDisplay::update, BobDisplay::view)
         .theme(|_| Theme::Dark)
