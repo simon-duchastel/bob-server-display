@@ -14,7 +14,7 @@ pub fn build_view(stats: &SystemStats) -> Element<'static, crate::Message> {
     let stats_row = row![
         stat_card(
             "CPU",
-            format!("{:.1}%", stats.cpu_usage),
+            format!("{:.0}%", stats.cpu_usage),
             stats.cpu_usage,
             iced::Color::from_rgb(0.9, 0.3, 0.3),
         ),
@@ -116,7 +116,7 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
     };
 
     let value = if temp > 0.0 {
-        format!("{:.1}°C", temp)
+        format!("{:.0}°C", temp)
     } else {
         "--".to_string()
     };
