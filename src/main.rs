@@ -1,10 +1,14 @@
 mod system;
 mod view;
 
-use iced::time;
-use iced::{window, Element, Task, Theme};
+use iced::{window, Element, Subscription, Task, Theme};
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use system::{SystemMonitor, SystemStats};
+use system::{StatsResponse, SystemMonitor, SystemStats};
+
+/// Refresh rate - 10 times per second (100ms)
+const REFRESH_INTERVAL_MS: u64 = 100;
 
 fn main() -> iced::Result {
     iced::application("Bob Server Display", BobDisplay::update, BobDisplay::view)
@@ -27,31 +31,47 @@ pub enum Message {
 struct BobDisplay {
     stats: SystemStats,
     system_monitor: SystemMonitor,
+    stats_receiver: Arc<Mutex<Receiver<StatsResponse>>>,
 }
 
 impl BobDisplay {
     fn new() -> (Self, Task<Message>) {
-        let mut system_monitor = SystemMonitor::new();
-        let initial_stats = system_monitor.refresh();
+        // Create system monitor with dedicated thread
+        let (system_monitor, stats_receiver) = SystemMonitor::new();
 
-        (
-            Self {
-                stats: initial_stats,
-                system_monitor,
-            },
-            window::get_latest()
-                .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)])),
-        )
+        // Wrap receiver in Arc<Mutex> for thread-safe access
+        let stats_receiver = Arc::new(Mutex::new(stats_receiver));
+
+        let display = Self {
+            stats: SystemStats::default(),
+            system_monitor,
+            stats_receiver,
+        };
+
+        // Request initial stats
+        display.system_monitor.refresh();
+
+        let init_task = window::get_latest()
+            .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)]));
+
+        (display, init_task)
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => {
-                let stats = self.system_monitor.refresh();
-                self.stats = stats;
+                // Send refresh command to dedicated thread
+                self.system_monitor.refresh();
+
+                // Check for pending stats responses
+                while let Ok(StatsResponse::Stats(stats)) =
+                    self.stats_receiver.lock().unwrap().try_recv()
+                {
+                    self.stats = stats;
+                }
             }
-            Message::StatsUpdated(_stats) => {
-                // This variant exists for potential async updates in the future
+            Message::StatsUpdated(stats) => {
+                self.stats = stats;
             }
         }
         Task::none()
@@ -61,7 +81,10 @@ impl BobDisplay {
         view::build_view(&self.stats)
     }
 
-    fn subscription(&self) -> iced::Subscription<Message> {
-        time::every(Duration::from_secs(2)).map(|_| Message::Tick)
+    fn subscription(&self) -> Subscription<Message> {
+        use iced::time;
+
+        // Timer for sending refresh commands
+        time::every(Duration::from_millis(REFRESH_INTERVAL_MS)).map(|_| Message::Tick)
     }
 }
