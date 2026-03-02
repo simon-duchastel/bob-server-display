@@ -24,9 +24,7 @@ pub fn build_view(stats: &SystemStats) -> Element<'static, crate::Message> {
     .spacing(15)
     .align_y(Alignment::Center);
 
-    let content = column![stats_row]
-        .spacing(10)
-        .align_x(Alignment::Center);
+    let content = column![stats_row].spacing(10).align_x(Alignment::Center);
 
     container(content)
         .width(Length::Fill)
