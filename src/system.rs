@@ -93,7 +93,12 @@ impl SystemMonitor {
             }
         });
 
-        (Self { command_sender: cmd_tx }, resp_rx)
+        (
+            Self {
+                command_sender: cmd_tx,
+            },
+            resp_rx,
+        )
     }
 
     /// Send a refresh command to the stats thread.
@@ -113,8 +118,7 @@ fn calculate_stats(
 ) -> SystemStats {
     // CPU
     let cpu_usage = if !system.cpus().is_empty() {
-        system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>()
-            / system.cpus().len() as f32
+        system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() / system.cpus().len() as f32
     } else {
         0.0
     };
@@ -136,10 +140,8 @@ fn calculate_stats(
     let rx_delta = current_rx.saturating_sub(*last_rx);
     let tx_delta = current_tx.saturating_sub(*last_tx);
 
-    let download_mbps =
-        (rx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
-    let upload_mbps =
-        (tx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
+    let download_mbps = (rx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
+    let upload_mbps = (tx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
 
     *last_rx = current_rx;
     *last_tx = current_tx;

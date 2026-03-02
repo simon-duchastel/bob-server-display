@@ -2,10 +2,10 @@ mod system;
 mod view;
 
 use iced::{window, Element, Subscription, Task, Theme};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use system::{SystemMonitor, SystemStats, StatsResponse};
+use system::{StatsResponse, SystemMonitor, SystemStats};
 
 /// Refresh rate - 10 times per second (100ms)
 const REFRESH_INTERVAL_MS: u64 = 100;
@@ -51,11 +51,8 @@ impl BobDisplay {
         // Request initial stats
         display.system_monitor.refresh();
 
-        let init_task =
-            window::get_latest().and_then(|id| Task::batch([window::change_mode(
-                id,
-                window::Mode::Windowed,
-            )]));
+        let init_task = window::get_latest()
+            .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)]));
 
         (display, init_task)
     }
