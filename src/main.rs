@@ -1,33 +1,30 @@
-mod display_control;
 mod system;
 mod view;
 
-use display_control::DisplayController;
 use iced::time;
 use iced::widget::{button, center, container, mouse_area, text};
-use iced::{mouse, window, Element, Event, Length, Subscription, Task, Theme};
+use iced::{mouse, window, Background, Color, Element, Event, Length, Subscription, Task, Theme};
 use std::time::{Duration, Instant};
 use system::{SystemMonitor, SystemStats};
 
-/// Configuration for display auto-turn-off behavior
+/// Configuration for display auto-dim behavior
 pub mod config {
     use std::time::Duration;
 
-    /// Duration of inactivity before display turns off (default: 20 minutes)
-    pub const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(1200);
+    /// Duration of inactivity before display dims (default: 5 minutes)
+    pub const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(300);
 
     /// Interval to check for inactivity (checks every second)
     pub const CHECK_INTERVAL: Duration = Duration::from_secs(1);
 
-    /// Size of the turn-off button
+    /// Size of the dim button
     pub const BUTTON_SIZE: f32 = 60.0;
 
     /// Size of the icon inside the button
     pub const ICON_SIZE: f32 = 30.0;
 
-    /// Display output name for wlr-randr/swaymsg (change this to match your setup)
-    /// Common values: "HEADLESS-1", "HDMI-A-1", "DP-1", "eDP-1", etc.
-    pub const DISPLAY_OUTPUT: &str = "HEADLESS-1";
+    /// Opacity of the dim overlay (0.0 = fully transparent, 1.0 = fully opaque)
+    pub const DIM_OPACITY: f32 = 0.85;
 }
 
 fn main() -> iced::Result {
@@ -50,19 +47,17 @@ pub enum Message {
     CheckInactivity,
     /// User interaction detected
     ActivityDetected,
-    /// Turn off display button pressed
-    TurnOffDisplay,
+    /// Dim display button pressed
+    DimDisplay,
 }
 
 struct BobDisplay {
     stats: SystemStats,
     system_monitor: SystemMonitor,
-    /// Whether the display is currently off
-    display_off: bool,
+    /// Whether the display is currently dimmed
+    dimmed: bool,
     /// Last time user activity was detected
     last_activity: Instant,
-    /// Controller for actual display power
-    display_controller: DisplayController,
 }
 
 impl BobDisplay {
@@ -70,15 +65,13 @@ impl BobDisplay {
         let mut system_monitor = SystemMonitor::new();
         let initial_stats = system_monitor.refresh();
         let now = Instant::now();
-        let display_controller = DisplayController::with_output(config::DISPLAY_OUTPUT);
 
         (
             Self {
                 stats: initial_stats,
                 system_monitor,
-                display_off: false,
+                dimmed: false,
                 last_activity: now,
-                display_controller,
             },
             window::get_latest()
                 .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)])),
@@ -95,89 +88,81 @@ impl BobDisplay {
                 // This variant exists for potential async updates in the future
             }
             Message::CheckInactivity => {
-                if !self.display_off {
+                if !self.dimmed {
                     let elapsed = self.last_activity.elapsed();
                     if elapsed >= config::INACTIVITY_TIMEOUT {
-                        // Turn off the actual display
-                        if let Err(e) = self.display_controller.turn_off() {
-                            eprintln!("Warning: Failed to turn off display: {}", e);
-                        }
-                        self.display_off = true;
+                        self.dimmed = true;
                     }
                 }
             }
             Message::ActivityDetected => {
-                if self.display_off {
-                    // Turn on the actual display
-                    if let Err(e) = self.display_controller.turn_on() {
-                        eprintln!("Warning: Failed to turn on display: {}", e);
-                    }
-                    self.display_off = false;
+                if self.dimmed {
+                    // When display is dimmed, any activity should brighten it
+                    self.dimmed = false;
                 }
                 self.last_activity = Instant::now();
             }
-            Message::TurnOffDisplay => {
-                // Turn off the actual display
-                if let Err(e) = self.display_controller.turn_off() {
-                    eprintln!("Warning: Failed to turn off display: {}", e);
-                }
-                self.display_off = true;
+            Message::DimDisplay => {
+                self.dimmed = true;
             }
         }
         Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
-        if self.display_off {
-            self.view_screen_off()
-        } else {
-            self.view_main_screen()
-        }
-    }
-
-    fn view_screen_off(&self) -> Element<'_, Message> {
-        // When screen is off, show a black container that captures all interactions
-        // Tapping anywhere will wake the display
-        mouse_area(
-            container(center(text("")))
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(|_theme| iced::widget::container::Style {
-                    background: Some(iced::Background::Color(iced::Color::from_rgb(
-                        0.0, 0.0, 0.0,
-                    ))),
-                    ..Default::default()
-                }),
-        )
-        .on_press(Message::ActivityDetected)
-        .into()
-    }
-
-    fn view_main_screen(&self) -> Element<'_, Message> {
+        // Build the main content view
         let time_remaining =
             config::INACTIVITY_TIMEOUT.saturating_sub(self.last_activity.elapsed());
         let time_remaining_mins = time_remaining.as_secs() / 60;
         let time_remaining_secs = time_remaining.as_secs() % 60;
 
-        // Turn-off button with square icon
-        let turn_off_button = button(
+        // Dim button with half-moon icon
+        let dim_button = button(
             center(
-                // Square icon for turn-off button
-                text("■").size(config::ICON_SIZE),
+                // Half-moon icon for dim button
+                text("◐").size(config::ICON_SIZE),
             )
             .width(Length::Fixed(config::BUTTON_SIZE))
             .height(Length::Fixed(config::BUTTON_SIZE)),
         )
-        .on_press(Message::TurnOffDisplay)
+        .on_press(Message::DimDisplay)
         .width(Length::Fixed(config::BUTTON_SIZE))
         .height(Length::Fixed(config::BUTTON_SIZE));
 
-        view::build_view_with_controls(
+        let main_content = view::build_view_with_controls(
             &self.stats,
             time_remaining_mins,
             time_remaining_secs,
-            turn_off_button.into(),
-        )
+            dim_button.into(),
+        );
+
+        if self.dimmed {
+            // When dimmed, wrap the main content in a dark semi-transparent overlay
+            // that can be clicked to wake up
+            mouse_area(
+                container(
+                    // The dimmed overlay container
+                    container(main_content)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(|_theme| iced::widget::container::Style {
+                            background: Some(Background::Color(Color::from_rgba(
+                                0.0,
+                                0.0,
+                                0.0,
+                                config::DIM_OPACITY,
+                            ))),
+                            ..Default::default()
+                        }),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill),
+            )
+            .on_press(Message::ActivityDetected)
+            .into()
+        } else {
+            main_content
+        }
     }
 
     fn subscription(&self) -> Subscription<Message> {
