@@ -4,7 +4,6 @@ use iced::widget::{column, container, progress_bar, row, text};
 use iced::Element;
 use iced::{Alignment, Length, Theme};
 
-#[allow(dead_code)]
 pub fn build_view(stats: &SystemStats) -> Element<'static, crate::Message> {
     let title = text("BOB SERVER")
         .size(28)
@@ -238,67 +237,4 @@ fn format_upload(mbps: f32) -> String {
     } else {
         format!("{:.0} Kb/s", mbps * 1000.0)
     }
-}
-
-/// Build view with auto-turn-off controls and countdown timer
-pub fn build_view_with_controls<'a>(
-    stats: &'a SystemStats,
-    time_remaining_mins: u64,
-    time_remaining_secs: u64,
-    turn_off_button: iced::Element<'a, crate::Message>,
-) -> iced::Element<'a, crate::Message> {
-    use iced::widget::{column, container, row, text};
-    use iced::{Alignment, Length, Theme};
-
-    let title = text("BOB SERVER")
-        .size(28)
-        .style(|theme: &Theme| iced::widget::text::Style {
-            color: Some(theme.palette().text),
-        });
-
-    let stats_row = row![
-        stat_card(
-            "CPU",
-            format!("{:.1}%", stats.cpu_usage),
-            stats.cpu_usage,
-            iced::Color::from_rgb(0.9, 0.3, 0.3),
-        ),
-        stat_card(
-            "RAM",
-            format!("{:.1} GB", stats.ram_used_gb),
-            stats.ram_usage_percent,
-            iced::Color::from_rgb(0.3, 0.6, 0.9),
-        ),
-        temp_card(stats.temperature_celsius),
-        network_card(stats.upload_mbps, stats.download_mbps),
-    ]
-    .spacing(20)
-    .align_y(Alignment::Center);
-
-    // Auto-off countdown timer
-    let timer_text = text(format!(
-        "Auto-off in {:02}:{:02}",
-        time_remaining_mins, time_remaining_secs
-    ))
-    .size(12)
-    .style(|theme: &Theme| iced::widget::text::Style {
-        color: Some(theme.palette().text.scale_alpha(0.5)),
-    });
-
-    // Controls row with timer and turn-off button
-    let controls_row = row![timer_text, turn_off_button]
-        .spacing(15)
-        .align_y(Alignment::Center);
-
-    let content = column![title, stats_row, controls_row]
-        .spacing(15)
-        .align_x(Alignment::Center);
-
-    container(content)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill)
-        .padding(20)
-        .into()
 }
