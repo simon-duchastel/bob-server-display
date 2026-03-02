@@ -114,17 +114,33 @@ impl BacklightController {
     fn set_brightness(&self, brightness: u32) -> Result<(), String> {
         let brightness = brightness.min(self.max_brightness);
 
-        fs::write(&self.brightness_path, brightness.to_string()).map_err(|e| {
-            format!(
-                "Failed to set brightness: {} (path: {})",
-                e, self.brightness_path
-            )
-        })?;
+        // Note: Some backlight drivers (like rpi_backlight) return an error
+        // even when the write succeeds. We ignore write errors and verify
+        // by reading back the value.
+        let _ = fs::write(&self.brightness_path, brightness.to_string());
+
+        // Verify the write by reading back the actual brightness
+        let actual = self
+            .current_brightness()
+            .map_err(|e| format!("Failed to verify brightness: {}", e))?;
+
+        // The driver might have adjusted the value, so we just check it's close
+        let expected = brightness as i32;
+        let actual_i32 = actual as i32;
+        let diff = (expected - actual_i32).abs();
+
+        if diff > 10 {
+            return Err(format!(
+                "Brightness verification failed: wrote {}, got {} (diff: {})",
+                brightness, actual, diff
+            ));
+        }
 
         println!(
-            "Set brightness to {} ({}%)",
+            "Set brightness to {} ({}%), actual: {}",
             brightness,
-            (brightness as f32 / self.max_brightness as f32 * 100.0) as u32
+            (brightness as f32 / self.max_brightness as f32 * 100.0) as u32,
+            actual
         );
 
         Ok(())
@@ -141,7 +157,6 @@ impl BacklightController {
     }
 
     /// Get current brightness
-    #[allow(dead_code)]
     pub fn current_brightness(&self) -> Result<u32, String> {
         fs::read_to_string(&self.brightness_path)
             .map_err(|e| format!("Failed to read brightness: {}", e))?
