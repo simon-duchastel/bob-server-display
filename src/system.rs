@@ -135,8 +135,10 @@ fn calculate_stats(
     let rx_delta = current_rx.saturating_sub(*last_rx);
     let tx_delta = current_tx.saturating_sub(*last_tx);
 
-    let download_mbps = (rx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
-    let upload_mbps = (tx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001);
+    let download_mbps =
+        bucket_to_point1_mbps((rx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001));
+    let upload_mbps =
+        bucket_to_point1_mbps((tx_delta as f32 * 8.0 / 1_000_000.0) / elapsed_secs.max(0.001));
 
     *last_rx = current_rx;
     *last_tx = current_tx;
@@ -164,4 +166,9 @@ fn calculate_stats(
         download_mbps,
         temperature_celsius,
     }
+}
+
+/// Bucket network speed to 0.1 Mbps increments (100 kbps).
+fn bucket_to_point1_mbps(mbps: f32) -> f32 {
+    (mbps * 10.0).round() / 10.0
 }
