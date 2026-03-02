@@ -47,13 +47,13 @@ fn stat_card(
     let label_owned = label.to_owned();
 
     let label_text = text(label_owned)
-        .size(20)
+        .size(28)
         .style(|theme: &Theme| iced::widget::text::Style {
             color: Some(theme.palette().text.scale_alpha(0.7)),
         });
 
     let value_text = text(value)
-        .size(48)
+        .size(72)
         .style(move |_theme: &Theme| iced::widget::text::Style {
             color: Some(accent_color),
         });
@@ -74,11 +74,11 @@ fn stat_card(
         .align_x(Alignment::Center);
 
     container(card_content)
-        .width(Length::Fixed(200.0))
-        .height(Length::Fixed(120.0))
+        .width(Length::Fixed(220.0))
+        .height(Length::Fixed(150.0))
         .center_x(Length::Fill)
         .center_y(Length::Fill)
-        .padding(8)
+        .padding(12)
         .style(|theme: &Theme| {
             let background = theme.palette().background;
             iced::widget::container::Style {
@@ -96,7 +96,7 @@ fn stat_card(
 
 fn temp_card(temp: f32) -> Element<'static, crate::Message> {
     let label = text("TEMP")
-        .size(20)
+        .size(28)
         .style(|theme: &Theme| iced::widget::text::Style {
             color: Some(theme.palette().text.scale_alpha(0.7)),
         });
@@ -116,7 +116,7 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
     };
 
     let value_text = text(value)
-        .size(48)
+        .size(72)
         .style(move |_theme: &Theme| iced::widget::text::Style { color: Some(color) });
 
     let indicator = container(text(""))
@@ -136,11 +136,11 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
         .align_x(Alignment::Center);
 
     container(card_content)
-        .width(Length::Fixed(150.0))
-        .height(Length::Fixed(120.0))
+        .width(Length::Fixed(170.0))
+        .height(Length::Fixed(150.0))
         .center_x(Length::Fill)
         .center_y(Length::Fill)
-        .padding(8)
+        .padding(12)
         .style(|theme: &Theme| {
             let background = theme.palette().background;
             iced::widget::container::Style {
@@ -158,7 +158,7 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
 
 fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> {
     let label = text("NETWORK")
-        .size(20)
+        .size(28)
         .style(|theme: &Theme| iced::widget::text::Style {
             color: Some(theme.palette().text.scale_alpha(0.7)),
         });
@@ -167,23 +167,23 @@ fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> 
     let upload_color = iced::Color::from_rgb(0.8, 0.5, 0.3);
 
     let download_row = row![
-        text("▼").size(20).style(move |_theme: &Theme| {
+        text("▼").size(28).style(move |_theme: &Theme| {
             iced::widget::text::Style {
                 color: Some(download_color),
             }
         }),
-        text(format_download(download)).size(28),
+        text(format_download(download)).size(42),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
 
     let upload_row = row![
-        text("▲").size(20).style(move |_theme: &Theme| {
+        text("▲").size(28).style(move |_theme: &Theme| {
             iced::widget::text::Style {
                 color: Some(upload_color),
             }
         }),
-        text(format_upload(upload)).size(28),
+        text(format_upload(upload)).size(42),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
@@ -193,11 +193,11 @@ fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> 
         .align_x(Alignment::Center);
 
     container(card_content)
-        .width(Length::Fixed(200.0))
-        .height(Length::Fixed(120.0))
+        .width(Length::Fixed(240.0))
+        .height(Length::Fixed(150.0))
         .center_x(Length::Fill)
         .center_y(Length::Fill)
-        .padding(8)
+        .padding(12)
         .style(|theme: &Theme| {
             let background = theme.palette().background;
             iced::widget::container::Style {
