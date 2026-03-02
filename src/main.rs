@@ -1,6 +1,8 @@
+mod display_control;
 mod system;
 mod view;
 
+use display_control::DisplayController;
 use iced::time;
 use iced::widget::{button, center, container, mouse_area, text};
 use iced::{mouse, window, Element, Event, Length, Subscription, Task, Theme};
@@ -22,6 +24,10 @@ pub mod config {
 
     /// Size of the icon inside the button
     pub const ICON_SIZE: f32 = 30.0;
+
+    /// Display output name for wlr-randr/swaymsg (change this to match your setup)
+    /// Common values: "HEADLESS-1", "HDMI-A-1", "DP-1", "eDP-1", etc.
+    pub const DISPLAY_OUTPUT: &str = "HEADLESS-1";
 }
 
 fn main() -> iced::Result {
@@ -55,6 +61,8 @@ struct BobDisplay {
     display_off: bool,
     /// Last time user activity was detected
     last_activity: Instant,
+    /// Controller for actual display power
+    display_controller: DisplayController,
 }
 
 impl BobDisplay {
@@ -62,6 +70,7 @@ impl BobDisplay {
         let mut system_monitor = SystemMonitor::new();
         let initial_stats = system_monitor.refresh();
         let now = Instant::now();
+        let display_controller = DisplayController::with_output(config::DISPLAY_OUTPUT);
 
         (
             Self {
@@ -69,6 +78,7 @@ impl BobDisplay {
                 system_monitor,
                 display_off: false,
                 last_activity: now,
+                display_controller,
             },
             window::get_latest()
                 .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)])),
@@ -88,18 +98,29 @@ impl BobDisplay {
                 if !self.display_off {
                     let elapsed = self.last_activity.elapsed();
                     if elapsed >= config::INACTIVITY_TIMEOUT {
+                        // Turn off the actual display
+                        if let Err(e) = self.display_controller.turn_off() {
+                            eprintln!("Warning: Failed to turn off display: {}", e);
+                        }
                         self.display_off = true;
                     }
                 }
             }
             Message::ActivityDetected => {
                 if self.display_off {
-                    // When display is off, any activity should wake it
+                    // Turn on the actual display
+                    if let Err(e) = self.display_controller.turn_on() {
+                        eprintln!("Warning: Failed to turn on display: {}", e);
+                    }
                     self.display_off = false;
                 }
                 self.last_activity = Instant::now();
             }
             Message::TurnOffDisplay => {
+                // Turn off the actual display
+                if let Err(e) = self.display_controller.turn_off() {
+                    eprintln!("Warning: Failed to turn off display: {}", e);
+                }
                 self.display_off = true;
             }
         }
