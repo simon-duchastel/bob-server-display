@@ -30,46 +30,46 @@ impl BacklightController {
             .map_err(|e| format!("Failed to read backlight directory: {}", e))?;
 
         for entry in entries.flatten() {
-                let name = entry.file_name();
-                let device_name = name.to_string_lossy();
+            let name = entry.file_name();
+            let device_name = name.to_string_lossy();
 
-                // Skip symlinks like ".." and "."
-                if device_name.starts_with(".") {
-                    continue;
-                }
-
-                let brightness_path = format!("/sys/class/backlight/{}/brightness", device_name);
-                let max_brightness_path =
-                    format!("/sys/class/backlight/{}/max_brightness", device_name);
-
-                // Check if brightness file exists and is writable
-                if Path::new(&brightness_path).exists() {
-                    // Read max brightness
-                    let max_brightness = fs::read_to_string(&max_brightness_path)
-                        .map_err(|e| format!("Failed to read max brightness: {}", e))?
-                        .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Failed to parse max brightness: {}", e))?;
-
-                    // Read current brightness as "normal" level
-                    let current_brightness = fs::read_to_string(&brightness_path)
-                        .map_err(|e| format!("Failed to read current brightness: {}", e))?
-                        .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Failed to parse current brightness: {}", e))?;
-
-                    println!(
-                        "Found backlight device: {} (max: {}, current: {})",
-                        device_name, max_brightness, current_brightness
-                    );
-
-                    return Ok(Self {
-                        brightness_path,
-                        max_brightness,
-                        normal_brightness: current_brightness,
-                    });
-                }
+            // Skip symlinks like ".." and "."
+            if device_name.starts_with(".") {
+                continue;
             }
+
+            let brightness_path = format!("/sys/class/backlight/{}/brightness", device_name);
+            let max_brightness_path =
+                format!("/sys/class/backlight/{}/max_brightness", device_name);
+
+            // Check if brightness file exists and is writable
+            if Path::new(&brightness_path).exists() {
+                // Read max brightness
+                let max_brightness = fs::read_to_string(&max_brightness_path)
+                    .map_err(|e| format!("Failed to read max brightness: {}", e))?
+                    .trim()
+                    .parse::<u32>()
+                    .map_err(|e| format!("Failed to parse max brightness: {}", e))?;
+
+                // Read current brightness as "normal" level
+                let current_brightness = fs::read_to_string(&brightness_path)
+                    .map_err(|e| format!("Failed to read current brightness: {}", e))?
+                    .trim()
+                    .parse::<u32>()
+                    .map_err(|e| format!("Failed to parse current brightness: {}", e))?;
+
+                println!(
+                    "Found backlight device: {} (max: {}, current: {})",
+                    device_name, max_brightness, current_brightness
+                );
+
+                return Ok(Self {
+                    brightness_path,
+                    max_brightness,
+                    normal_brightness: current_brightness,
+                });
+            }
+        }
 
         Err("No usable backlight device found".to_string())
     }
