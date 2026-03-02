@@ -62,6 +62,6 @@ impl BobDisplay {
     }
 
     fn subscription(&self) -> iced::Subscription<Message> {
-        time::every(Duration::from_secs(5)).map(|_| Message::Tick)
+        time::every(Duration::from_secs(2)).map(|_| Message::Tick)
     }
 }
