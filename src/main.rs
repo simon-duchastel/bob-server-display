@@ -11,7 +11,7 @@ use system::{SystemMonitor, SystemStats};
 pub mod config {
     use std::time::Duration;
 
-    /// Duration of inactivity before display dims (default: 5 minutes)
+    /// Duration of inactivity before display dims (default: 10 minutes)
     pub const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(600);
 
     /// Interval to check for inactivity (checks every second)
