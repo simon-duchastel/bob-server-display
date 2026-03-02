@@ -9,3 +9,16 @@ pub struct SystemStats {
     pub download_mbps: f32,
     pub temperature_celsius: f32,
 }
+
+/// Commands sent to the stats thread.
+#[derive(Debug, Clone)]
+pub enum StatsCommand {
+    Refresh,
+    Shutdown,
+}
+
+/// Responses from the stats thread.
+#[derive(Debug, Clone)]
+pub enum StatsResponse {
+    Stats(SystemStats),
+}
