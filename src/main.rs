@@ -12,7 +12,7 @@ pub mod config {
     use std::time::Duration;
 
     /// Duration of inactivity before display dims (default: 5 minutes)
-    pub const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(300);
+    pub const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(600);
 
     /// Interval to check for inactivity (checks every second)
     pub const CHECK_INTERVAL: Duration = Duration::from_secs(1);
