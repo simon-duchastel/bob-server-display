@@ -54,41 +54,36 @@ impl SystemMonitor {
             components.refresh(false);
             networks.refresh(false);
 
-            for (_, network) in &networks {
+            for network in networks.values() {
                 last_rx += network.total_received();
                 last_tx += network.total_transmitted();
             }
 
             // Process commands from main thread
-            loop {
-                match cmd_rx.recv() {
-                    Ok(StatsCommand::Refresh) => {
-                        let start_time = std::time::Instant::now();
+            while let Ok(StatsCommand::Refresh) = cmd_rx.recv() {
+                let start_time = std::time::Instant::now();
 
-                        // Refresh existing objects (fast, no allocation)
-                        system.refresh_all();
-                        components.refresh(false);
-                        networks.refresh(false);
+                // Refresh existing objects (fast, no allocation)
+                system.refresh_all();
+                components.refresh(false);
+                networks.refresh(false);
 
-                        let elapsed_secs = start_time.duration_since(last_time).as_secs_f32();
-                        last_time = start_time;
+                let elapsed_secs = start_time.duration_since(last_time).as_secs_f32();
+                last_time = start_time;
 
-                        // Calculate stats
-                        let stats = calculate_stats(
-                            &system,
-                            &components,
-                            &networks,
-                            &mut last_rx,
-                            &mut last_tx,
-                            elapsed_secs,
-                        );
+                // Calculate stats
+                let stats = calculate_stats(
+                    &system,
+                    &components,
+                    &networks,
+                    &mut last_rx,
+                    &mut last_tx,
+                    elapsed_secs,
+                );
 
-                        // Send back to main thread
-                        if resp_tx.send(StatsResponse::Stats(stats)).is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+                // Send back to main thread
+                if resp_tx.send(StatsResponse::Stats(stats)).is_err() {
+                    break;
                 }
             }
         });
@@ -134,8 +129,8 @@ fn calculate_stats(
     };
 
     // Network
-    let current_rx: u64 = networks.iter().map(|(_, n)| n.total_received()).sum();
-    let current_tx: u64 = networks.iter().map(|(_, n)| n.total_transmitted()).sum();
+    let current_rx: u64 = networks.values().map(|n| n.total_received()).sum();
+    let current_tx: u64 = networks.values().map(|n| n.total_transmitted()).sum();
 
     let rx_delta = current_rx.saturating_sub(*last_rx);
     let tx_delta = current_tx.saturating_sub(*last_tx);
