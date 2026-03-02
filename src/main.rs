@@ -31,7 +31,8 @@ struct BobDisplay {
     /// Channel to send commands to the stats thread
     command_sender: Option<std::sync::mpsc::Sender<StatsCommand>>,
     /// Channel to receive stats from the stats thread
-    stats_receiver: Option<std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<StatsResponse>>>>,
+    stats_receiver:
+        Option<std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<StatsResponse>>>>,
 }
 
 impl BobDisplay {
@@ -118,18 +119,10 @@ impl BobDisplay {
                         let temperature_celsius = components
                             .iter()
                             .filter(|c| {
-                                c.label()
-                                    .to_lowercase()
-                                    .contains("cpu")
-                                    || c.label()
-                                        .to_lowercase()
-                                        .contains("thermal")
-                                    || c.label()
-                                        .to_lowercase()
-                                        .contains("k10temp")
-                                    || c.label()
-                                        .to_lowercase()
-                                        .contains("coretemp")
+                                c.label().to_lowercase().contains("cpu")
+                                    || c.label().to_lowercase().contains("thermal")
+                                    || c.label().to_lowercase().contains("k10temp")
+                                    || c.label().to_lowercase().contains("coretemp")
                             })
                             .map(|c| c.temperature())
                             .next()
@@ -165,11 +158,8 @@ impl BobDisplay {
         // Request initial stats
         let _ = cmd_tx.send(StatsCommand::Refresh);
 
-        let init_task =
-            window::get_latest().and_then(|id| Task::batch([window::change_mode(
-                id,
-                window::Mode::Windowed,
-            )]));
+        let init_task = window::get_latest()
+            .and_then(|id| Task::batch([window::change_mode(id, window::Mode::Windowed)]));
 
         (display, init_task)
     }
@@ -184,8 +174,7 @@ impl BobDisplay {
 
                 // Check for pending stats responses
                 if let Some(ref rx) = self.stats_receiver {
-                    while let Ok(StatsResponse::Stats(stats)) = rx.lock().unwrap().try_recv()
-                    {
+                    while let Ok(StatsResponse::Stats(stats)) = rx.lock().unwrap().try_recv() {
                         self.stats = stats;
                     }
                 }
