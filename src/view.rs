@@ -213,20 +213,24 @@ fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> 
 
 fn format_download(mbps: f32) -> String {
     if mbps >= 1000.0 {
-        format!("{:.1} Gb/s", mbps / 1000.0)
+        format!("{:.0} Gb/s", mbps / 1000.0)
     } else if mbps >= 1.0 {
+        format!("{:.0} Mb/s", mbps)
+    } else if mbps > 0.0 {
         format!("{:.1} Mb/s", mbps)
     } else {
-        format!("{:.0} Kb/s", mbps * 1000.0)
+        "0 Mb/s".to_string()
     }
 }
 
 fn format_upload(mbps: f32) -> String {
     if mbps >= 1000.0 {
-        format!("{:.1} Gb/s", mbps / 1000.0)
+        format!("{:.0} Gb/s", mbps / 1000.0)
     } else if mbps >= 1.0 {
+        format!("{:.0} Mb/s", mbps)
+    } else if mbps > 0.0 {
         format!("{:.1} Mb/s", mbps)
     } else {
-        format!("{:.0} Kb/s", mbps * 1000.0)
+        "0 Mb/s".to_string()
     }
 }
