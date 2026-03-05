@@ -181,21 +181,6 @@ impl WaveData {
     pub fn values(&self) -> &[f32] {
         &self.values
     }
-
-    /// Get the most recent value, if any.
-    pub fn latest(&self) -> Option<f32> {
-        self.values.last().copied()
-    }
-
-    /// Get the maximum value in the data.
-    pub fn max(&self) -> f32 {
-        self.values.iter().copied().fold(0.0, f32::max)
-    }
-
-    /// Clear all data.
-    pub fn clear(&mut self) {
-        self.values.clear();
-    }
 }
 
 impl Default for WaveData {
