@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Iced GUI framework with GPU-accelerated wgpu backend
-iced = { version = "0.13", features = ["wgpu", "advanced", "tokio"] }
+iced = { version = "0.13", features = ["wgpu", "advanced", "tokio", "canvas"] }
 
 # Async runtime
 tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }

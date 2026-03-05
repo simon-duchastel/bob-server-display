@@ -1,25 +1,38 @@
 use crate::system::SystemStats;
+use crate::wave_chart::{WaveChart, WaveData};
 use iced::border::Radius;
-use iced::widget::{column, container, progress_bar, row, text};
+use iced::widget::{column, container, row, text};
 use iced::Element;
 use iced::{Alignment, Length, Theme};
 
-pub fn build_view(stats: &SystemStats) -> Element<'static, crate::Message> {
+pub fn build_view<'a>(
+    stats: &SystemStats,
+    cpu_history: &'a WaveData,
+    ram_history: &'a WaveData,
+    temp_history: &'a WaveData,
+    upload_history: &'a WaveData,
+    download_history: &'a WaveData,
+) -> Element<'a, crate::Message> {
     let stats_row = row![
         stat_card(
             "CPU",
             format!("{:.0}%", stats.cpu_usage),
-            stats.cpu_usage,
+            cpu_history,
             iced::Color::from_rgb(0.9, 0.3, 0.3),
         ),
         stat_card(
             "RAM",
             format!("{:.1} GB", stats.ram_used_gb),
-            stats.ram_usage_percent,
+            ram_history,
             iced::Color::from_rgb(0.3, 0.6, 0.9),
         ),
-        temp_card(stats.temperature_celsius),
-        network_card(stats.upload_mbps, stats.download_mbps),
+        temp_card(stats.temperature_celsius, temp_history),
+        network_card(
+            stats.upload_mbps,
+            stats.download_mbps,
+            upload_history,
+            download_history,
+        ),
     ]
     .spacing(15)
     .align_y(Alignment::Center);
@@ -35,13 +48,12 @@ pub fn build_view(stats: &SystemStats) -> Element<'static, crate::Message> {
         .into()
 }
 
-fn stat_card(
+fn stat_card<'a>(
     label: &str,
     value: String,
-    percent: f32,
+    history: &'a WaveData,
     accent_color: iced::Color,
-) -> Element<'static, crate::Message> {
-    let normalized_percent = percent.clamp(0.0, 100.0) / 100.0;
+) -> Element<'a, crate::Message> {
     let label_owned = label.to_owned();
 
     let label_text = text(label_owned)
@@ -56,18 +68,13 @@ fn stat_card(
             color: Some(accent_color),
         });
 
-    let bar = progress_bar(0.0..=1.0, normalized_percent)
-        .height(Length::Fixed(4.0))
-        .style(move |theme: &Theme| iced::widget::progress_bar::Style {
-            bar: accent_color.into(),
-            background: theme.palette().background.scale_alpha(0.3).into(),
-            border: iced::Border {
-                radius: Radius::new(2.0),
-                ..Default::default()
-            },
-        });
+    // Use wave chart instead of progress bar
+    let wave = WaveChart::new(history.values(), accent_color)
+        .height(Length::Fixed(40.0))
+        .width(Length::Fill)
+        .max_points(60);
 
-    let card_content = column![label_text, value_text, bar]
+    let card_content = column![label_text, value_text, wave]
         .spacing(6)
         .align_x(Alignment::Center);
 
@@ -92,7 +99,7 @@ fn stat_card(
         .into()
 }
 
-fn temp_card(temp: f32) -> Element<'static, crate::Message> {
+fn temp_card<'a>(temp: f32, history: &'a WaveData) -> Element<'a, crate::Message> {
     let label = text("TEMP")
         .size(28)
         .style(|theme: &Theme| iced::widget::text::Style {
@@ -117,19 +124,13 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
         .size(72)
         .style(move |_theme: &Theme| iced::widget::text::Style { color: Some(color) });
 
-    let indicator = container(text(""))
-        .width(Length::Fixed(30.0))
-        .height(Length::Fixed(4.0))
-        .style(move |_theme: &Theme| iced::widget::container::Style {
-            background: Some(color.into()),
-            border: iced::Border {
-                radius: Radius::new(2.0),
-                ..Default::default()
-            },
-            ..Default::default()
-        });
+    // Use wave chart for temperature
+    let wave = WaveChart::new(history.values(), color)
+        .height(Length::Fixed(40.0))
+        .width(Length::Fill)
+        .max_points(60);
 
-    let card_content = column![label, value_text, indicator]
+    let card_content = column![label, value_text, wave]
         .spacing(6)
         .align_x(Alignment::Center);
 
@@ -154,7 +155,12 @@ fn temp_card(temp: f32) -> Element<'static, crate::Message> {
         .into()
 }
 
-fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> {
+fn network_card<'a>(
+    upload: f32,
+    download: f32,
+    upload_history: &'a WaveData,
+    download_history: &'a WaveData,
+) -> Element<'a, crate::Message> {
     let label = text("NETWORK")
         .size(28)
         .style(|theme: &Theme| iced::widget::text::Style {
@@ -186,8 +192,21 @@ fn network_card(upload: f32, download: f32) -> Element<'static, crate::Message> 
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let card_content = column![label, download_row, upload_row]
-        .spacing(8)
+    // Create a row with both wave charts side by side
+    let download_wave = WaveChart::new(download_history.values(), download_color)
+        .height(Length::Fixed(18.0))
+        .width(Length::FillPortion(1))
+        .max_points(60);
+
+    let upload_wave = WaveChart::new(upload_history.values(), upload_color)
+        .height(Length::Fixed(18.0))
+        .width(Length::FillPortion(1))
+        .max_points(60);
+
+    let waves_row = row![download_wave, upload_wave].spacing(8);
+
+    let card_content = column![label, download_row, upload_row, waves_row]
+        .spacing(4)
         .align_x(Alignment::Center);
 
     container(card_content)
